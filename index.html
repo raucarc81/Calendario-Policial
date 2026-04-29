@@ -3,126 +3,91 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>👮 Calendario Policial</title>
+  <title>Calendario Policial</title>
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1C1C2E"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="CalPolicial"/>
   <link rel="apple-touch-icon" href="icon.svg"/>
   <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{background:#F1F5F9;font-family:system-ui,sans-serif;overscroll-behavior:none;}
-    #splash{display:flex;align-items:center;justify-content:center;min-height:100vh;
-      background:#F1F5F9;flex-direction:column;gap:14px;}
-    #root:empty + #splash, #root:not(:has(*)) {display:flex;}
-  </style>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#F1F5F9;font-family:system-ui,sans-serif;overscroll-behavior:none;}</style>
 </head>
 <body>
-<!-- Pantalla de carga mientras Babel procesa -->
-<div id="splash">
-  <div style="font-size:52px">👮</div>
-  <div style="font-size:14px;color:#64748B;font-family:system-ui">Cargando…</div>
-</div>
 <div id="root"></div>
-
 <script type="text/babel">
-const { useState, useMemo, useRef, useCallback, useEffect } = React;
-
-// Ocultar splash al arrancar React
-document.getElementById('splash').style.display='none';
-
-/* ── Helpers de fecha ── */
-const toKey = d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const fromKey = dk=>{const [y,m,d]=dk.split('-').map(Number);return new Date(y,m-1,d);};
-const addD = (d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
-const monStart = d=>{const r=new Date(d);const day=r.getDay();r.setDate(r.getDate()-(day===0?6:day-1));return r;};
-const DN  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-const DNF = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const MN  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const MNS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-
+const{useState,useMemo,useRef,useCallback,useEffect}=React;
+const toKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fromKey=dk=>{const[y,m,dd]=dk.split('-').map(Number);return new Date(y,m-1,dd);};
+const addD=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+const monStart=d=>{const r=new Date(d);const day=r.getDay();r.setDate(r.getDate()-(day===0?6:day-1));return r;};
+const DN=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],DNF=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MNS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TC='#90A4AE',LC='#43A047',FC_WORK='#EF5350',FC_REST='#66BB6A';
 
-/* ── Gráfico de tarta SVG propio (sin Recharts) ── */
-const PieSVG = ({data})=>{
-  const [hov,setHov] = useState(null);
-  const total = data.reduce((s,d)=>s+d.value,0);
-  if(!total) return null;
-  const cx=160,cy=160,R=125,ri=52;
-  let ang = -Math.PI/2;
-  const slices = data.map((d,i)=>{
-    const frac=d.value/total, start=ang, end=ang+frac*2*Math.PI; ang=end;
-    const c1=[Math.cos(start),Math.sin(start)], c2=[Math.cos(end),Math.sin(end)];
-    const large=frac>0.5?1:0;
-    const path=[
-      `M ${cx+ri*c1[0]} ${cy+ri*c1[1]}`,
-      `L ${cx+R*c1[0]} ${cy+R*c1[1]}`,
-      `A ${R} ${R} 0 ${large} 1 ${cx+R*c2[0]} ${cy+R*c2[1]}`,
-      `L ${cx+ri*c2[0]} ${cy+ri*c2[1]}`,
-      `A ${ri} ${ri} 0 ${large} 0 ${cx+ri*c1[0]} ${cy+ri*c1[1]} Z`
-    ].join(' ');
-    const mid=start+(end-start)/2;
-    return {...d,path,mid,frac,i};
-  });
-  const hd = hov!==null?slices[hov]:null;
-  return(
-    <svg viewBox="0 0 320 320" style={{width:'100%',maxHeight:300,display:'block'}}>
-      {slices.map(s=>(
-        <path key={s.i} d={s.path} fill={s.color} stroke="white" strokeWidth={hov===s.i?0:2}
-          style={{cursor:'pointer',filter:hov===s.i?`drop-shadow(0 0 6px ${s.color})`:'none',transition:'filter .15s'}}
-          onMouseEnter={()=>setHov(s.i)} onMouseLeave={()=>setHov(null)}
-          onTouchStart={()=>setHov(v=>v===s.i?null:s.i)}/>
-      ))}
-      {slices.filter(s=>s.frac>0.05).map(s=>{
-        const lx=cx+(R+ri)/2*1.15*Math.cos(s.mid), ly=cy+(R+ri)/2*1.15*Math.sin(s.mid);
-        return(<text key={s.i} x={lx} y={ly} textAnchor="middle" fontSize="8.5" fontWeight="700"
-          fill="white" style={{pointerEvents:'none'}}>{s.name}</text>);
-      })}
-      {hd&&<>
-        <text x={cx} y={cy-10} textAnchor="middle" fontSize="12" fontWeight="800" fill="#1E293B">{hd.name}</text>
-        <text x={cx} y={cy+8}  textAnchor="middle" fontSize="11" fill="#64748B">{hd.total} {hd.unit}</text>
-        <text x={cx} y={cy+26} textAnchor="middle" fontSize="10" fontWeight="700" fill={hd.color}>{(hd.frac*100).toFixed(1)}%</text>
-      </>}
-    </svg>
-  );
-};
+/* ── PM Madrid badge SVG ── */
+const LogoPM=({size=36})=>(
+  <svg viewBox="0 0 100 100" width={size} height={size} style={{flexShrink:0}}>
+    {Array.from({length:32},(_,i)=>{
+      const a=(i/32)*Math.PI*2-Math.PI/2,am=((i+.5)/32)*Math.PI*2-Math.PI/2,an=((i+1)/32)*Math.PI*2-Math.PI/2;
+      return<polygon key={i} points={`${50+36*Math.cos(a)} ${50+36*Math.sin(a)} ${50+49*Math.cos(am)} ${50+49*Math.sin(am)} ${50+36*Math.cos(an)} ${50+36*Math.sin(an)}`} fill="white"/>;
+    })}
+    <circle cx="50" cy="50" r="34" fill="#1C3A8A"/>
+    <circle cx="50" cy="50" r="27" fill="none" stroke="white" strokeWidth="1.2"/>
+    <path d="M50 24 L60 28 L60 39 C60 47 55 51 50 53 C45 51 40 47 40 39 L40 28Z" fill="white"/>
+    <text x="50" y="69" textAnchor="middle" fontSize="5.8" fontWeight="800" fill="white" letterSpacing=".2">PM MADRID</text>
+  </svg>
+);
+const LOGO_OPTS=[{id:'pm',l:'PM Madrid',e:null},{id:'p2',l:'Policía 👮',e:'👮'},{id:'p3',l:'Guardia 🛡️',e:'🛡️'},{id:'p4',l:'Bomberos 🚒',e:'🚒'},{id:'p5',l:'Sanitario 🚑',e:'🚑'}];
+const RenderLogo=({type,size=34})=>type==='pm'?<LogoPM size={size}/>:<span style={{fontSize:size*.88,lineHeight:1}}>{LOGO_OPTS.find(o=>o.id===type)?.e||'👮'}</span>;
 
-const INIT_CPTS = [
-  {id:'HLANT',   a:'HLANT',      n:'HORAS LIBRES AÑOS ANTERIORES',         t:0,   u:'H', c:'#FF6B6B', us:0, carryover:'both'},
-  {id:'HLIBS',   a:'HLIBS',      n:'HORAS LIBRES',                          t:1.4, u:'H', c:'#00BCD4', us:0, ag:true},
-  {id:'AMSBA',   a:'AMSBA',      n:'AUSENCIA MEDICA SIN BAJA',              t:4,   u:'d', c:'#2196F3', us:0},
-  {id:'CFEST',   a:'CFEST',      n:'COMPENSACION FESTIVOS',                 t:2,   u:'d', c:'#4CAF50', us:0, ag:true},
-  {id:'ASPAR',   a:'ASPAR',      n:'ASUNTOS PARTICULARES',                  t:6,   u:'d', c:'#F9A825', us:0},
-  {id:'ASPAA',   a:'ASPAA',      n:'ASUNTOS PARTICULARES AÑO ANTERIOR',     t:0,   u:'d', c:'#9C27B0', us:0, carryover:true},
-  {id:'LLACT',   a:'LLACT',      n:'LIC. LACTANCIA ACUMULADA',              t:30,  u:'d', c:'#009688', us:0},
-  {id:'CFANT',   a:'CFANT',      n:'COMP. FESTIVOS AÑO ANTERIOR',           t:0,   u:'d', c:'#81C784', us:0, carryover:true},
-  {id:'ENFAM',   a:'ENFAM',      n:'ENF/HOSP/REPO FAMILIAR',                t:0,   u:'d', c:'#E91E63', us:0},
-  {id:'ASMAF',   a:'ASMAF',      n:'ASISTENCIA MATRIMONIO FAMILIAR',        t:20,  u:'d', c:'#3F51B5', us:0},
-  {id:'FALFA',   a:'FALFA',      n:'FALLECIMIENTO FAMILIAR',                t:0,   u:'d', c:'#78909C', us:0},
-  {id:'PPATE',   a:'PPATE',      n:'PERMISO PATERNIDAD',                    t:140, u:'d', c:'#FF5722', us:0},
-  {id:'EXAME',   a:'EXAME',      n:'EXAMENES',                              t:0,   u:'d', c:'#A1887F', us:0},
-  {id:'ART154',  a:'ART15.4',    n:'DIAS ART. 15.4H (Traslado/Matrimonio)', t:0,   u:'d', c:'#8BC34A', us:0},
-  {id:'CURS7',   a:'CURS7',      n:'CURSOS ARTÍCULO 70',                    t:72,  u:'H', c:'#C0CA33', us:0},
-  {id:'PSUEL',   a:'PSUEL',      n:'PERMISO SIN SUELDO',                    t:0,   u:'d', c:'#FF7043', us:0},
-  {id:'SUSPF',   a:'SUSPF',      n:'SUSPENSION DE FUNCIONES',               t:0,   u:'d', c:'#7986CB', us:0},
-  {id:'DPUBL',   a:'DPUBL',      n:'DEBERES PÚBLICOS ART 15.4 J,K,N',       t:0,   u:'d', c:'#26A69A', us:0},
-  {id:'VACAN',   a:'VACAN',      n:'DÍAS ADICIONALES POR ANTIGÜEDAD',       t:1,   u:'d', c:'#EF5350', us:0},
-  {id:'VACAC',   a:'VACAC',      n:'VACACIONES',                            t:22,  u:'d', c:'#00ACC1', us:0},
-  {id:'HFCNO',   a:'HFCNO',      n:'HORAS FACTOR CORRECTOR NOCTURNO',       t:56,  u:'H', c:'#8E24AA', us:0},
-  {id:'HLART15', a:'HLART.15',   n:'HORAS ART. 15 4º L (POLICIAL)',         t:16,  u:'H', c:'#1976D2', us:0},
-  {id:'HFCNOAÑ', a:'HFCNOAÑ',   n:'H.F.C. NOCTURNO AÑO ANTERIOR',          t:0,   u:'H', c:'#00897B', us:0, carryover:true},
-  {id:'FEST2431',a:'FEST.24-31', n:'COMP. FESTIVOS 24 Y 31 DIC.',           t:0,   u:'d', c:'#2E7D32', us:0},
-  {id:'AJUSJOR', a:'AJUSJOR',    n:'COMP. EXCESO/AJUSTE JORNADA',           t:16,  u:'d', c:'#546E7A', us:0},
-  {id:'SANIV',   a:'SANIV',      n:'COMP. JORNADA SAN ISIDRO Y VER.',       t:4,   u:'d', c:'#558B2F', us:0},
-  {id:'CFORM',   a:'CFORM',      n:'COMP. FORMACIÓN FUERA JORNADA',         t:8,   u:'d', c:'#F57C00', us:0},
-  {id:'PPARE',   a:'PPARE',      n:'PERMISO PARENTAL ART. 128.2 RD 5/23',   t:56,  u:'d', c:'#6A1B9A', us:0},
+/* ── Concepts ── */
+const INIT_CPTS=[
+  {id:'HLANT',a:'HLANT',n:'HORAS LIBRES AÑOS ANTERIORES',t:0,u:'H',c:'#FF6B6B',us:0,carryover:'both'},
+  {id:'HLIBS',a:'HLIBS',n:'HORAS LIBRES',t:1.4,u:'H',c:'#00BCD4',us:0,ag:true},
+  {id:'AMSBA',a:'AMSBA',n:'AUSENCIA MEDICA SIN BAJA',t:4,u:'d',c:'#2196F3',us:0},
+  {id:'CFEST',a:'CFEST',n:'COMPENSACION FESTIVOS',t:2,u:'d',c:'#4CAF50',us:0,ag:true},
+  {id:'ASPAR',a:'ASPAR',n:'ASUNTOS PARTICULARES',t:6,u:'d',c:'#F9A825',us:0},
+  {id:'ASPAA',a:'ASPAA',n:'ASUNTOS PARTICULARES AÑO ANTERIOR',t:0,u:'d',c:'#9C27B0',us:0,carryover:true},
+  {id:'LLACT',a:'LLACT',n:'LIC. LACTANCIA ACUMULADA',t:30,u:'d',c:'#009688',us:0},
+  {id:'CFANT',a:'CFANT',n:'COMP. FESTIVOS AÑO ANTERIOR',t:0,u:'d',c:'#81C784',us:0,carryover:true},
+  {id:'ENFAM',a:'ENFAM',n:'ENF/HOSP/REPO FAMILIAR',t:0,u:'d',c:'#E91E63',us:0},
+  {id:'ASMAF',a:'ASMAF',n:'ASISTENCIA MATRIMONIO FAMILIAR',t:20,u:'d',c:'#3F51B5',us:0},
+  {id:'FALFA',a:'FALFA',n:'FALLECIMIENTO FAMILIAR',t:0,u:'d',c:'#78909C',us:0},
+  {id:'PPATE',a:'PPATE',n:'PERMISO PATERNIDAD',t:140,u:'d',c:'#FF5722',us:0},
+  {id:'EXAME',a:'EXAME',n:'EXAMENES',t:0,u:'d',c:'#A1887F',us:0},
+  {id:'ART154',a:'ART15.4',n:'DIAS ART. 15.4H',t:0,u:'d',c:'#8BC34A',us:0},
+  {id:'CURS7',a:'CURS7',n:'CURSOS ARTÍCULO 70',t:72,u:'H',c:'#C0CA33',us:0},
+  {id:'PSUEL',a:'PSUEL',n:'PERMISO SIN SUELDO',t:0,u:'d',c:'#FF7043',us:0},
+  {id:'SUSPF',a:'SUSPF',n:'SUSPENSION DE FUNCIONES',t:0,u:'d',c:'#7986CB',us:0},
+  {id:'DPUBL',a:'DPUBL',n:'DEBERES PÚBLICOS ART 15.4 J,K,N',t:0,u:'d',c:'#26A69A',us:0},
+  {id:'VACAN',a:'VACAN',n:'DÍAS ADICIONALES POR ANTIGÜEDAD',t:1,u:'d',c:'#EF5350',us:0},
+  {id:'VACAC',a:'VACAC',n:'VACACIONES',t:22,u:'d',c:'#00ACC1',us:0},
+  {id:'HFCNO',a:'HFCNO',n:'HORAS FACTOR CORRECTOR NOCTURNO',t:56,u:'H',c:'#8E24AA',us:0},
+  {id:'HLART15',a:'HLART.15',n:'HORAS ART. 15 4º L',t:16,u:'H',c:'#1976D2',us:0},
+  {id:'HFCNOAÑ',a:'HFCNOAÑ',n:'H.F.C. NOCTURNO AÑO ANTERIOR',t:0,u:'H',c:'#00897B',us:0,carryover:true},
+  {id:'FEST2431',a:'FEST.24-31',n:'COMP. FESTIVOS 24 Y 31 DIC.',t:0,u:'d',c:'#2E7D32',us:0},
+  {id:'AJUSJOR',a:'AJUSJOR',n:'COMP. EXCESO/AJUSTE JORNADA',t:16,u:'d',c:'#546E7A',us:0},
+  {id:'SANIV',a:'SANIV',n:'COMP. JORNADA SAN ISIDRO Y VER.',t:4,u:'d',c:'#558B2F',us:0},
+  {id:'CFORM',a:'CFORM',n:'COMP. FORMACIÓN FUERA JORNADA',t:8,u:'d',c:'#F57C00',us:0},
+  {id:'PPARE',a:'PPARE',n:'PERMISO PARENTAL ART. 128.2 RD 5/23',t:56,u:'d',c:'#6A1B9A',us:0},
 ];
 
-/* ── Shared UI ── */
+const INIT_PROF=(name='Principal')=>({name,cpts:INIT_CPTS.map(c=>({...c})),ents:{},mrDays:[],mwDays:[],pat:[]});
+const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',widgets:[
+  {id:'overtime',name:'Horas extra YTD',show:true},
+  {id:'trials_done',name:'Juicios realizados',show:true},
+  {id:'trials_future',name:'Juicios futuros',show:true},
+]};
+const EF={type:'TRABA',hm:'full',hrs:8,
+  wd:{ind:'',veh:'',os:'',pe:'',notas:''},
+  eh:{d:'',n:'',fd:'',dieta:'none'},
+  juicio:{active:false,juzgado:'',fecha:'',horaInicio:'',horaFin:'',termMunicipal:'dentro'}
+};
+
+/* ── UI helpers ── */
 const ProgBar=({pct,color,h=5})=>(
   <div style={{background:'#E8EAED',borderRadius:4,height:h,overflow:'hidden'}}>
     <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:color,borderRadius:4,transition:'width .35s'}}/>
@@ -130,12 +95,10 @@ const ProgBar=({pct,color,h=5})=>(
 );
 const Btn=({children,onClick,color='#1D4ED8',disabled,full,small,outline,style={}})=>(
   <button onClick={onClick} disabled={disabled} style={{
-    background:disabled?'#BDBDBD':outline?'transparent':color,
-    color:outline?color:'white',border:outline?`2px solid ${color}`:'none',
-    borderRadius:24,padding:small?'7px 14px':'11px 22px',
+    background:disabled?'#BDBDBD':outline?'transparent':color,color:outline?color:'white',
+    border:outline?`2px solid ${color}`:'none',borderRadius:24,padding:small?'7px 14px':'11px 22px',
     fontSize:small?11:13,fontWeight:700,cursor:disabled?'not-allowed':'pointer',
-    width:full?'100%':'auto',boxShadow:disabled?'none':`0 2px 8px ${color}44`,
-    transition:'transform .1s',...style}}
+    width:full?'100%':'auto',boxShadow:disabled?'none':`0 2px 8px ${color}44`,transition:'transform .1s',...style}}
     onMouseDown={e=>{if(!disabled)e.currentTarget.style.transform='scale(.97)';}}
     onMouseUp={e=>{e.currentTarget.style.transform='scale(1)';}}
   >{children}</button>
@@ -143,107 +106,153 @@ const Btn=({children,onClick,color='#1D4ED8',disabled,full,small,outline,style={
 const Card=({children,bg='white',style={}})=>(
   <div style={{background:bg,borderRadius:16,padding:14,boxShadow:'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
 );
-const SecTitle=({icon,children})=>(
+const STitle=({icon,children})=>(
   <div style={{fontSize:13,fontWeight:800,color:'#333',marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
     {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
   </div>
 );
-const InputRow=({label,value,onChange,type='text',ph='',multiline})=>(
+const IRow=({label,value,onChange,type='text',ph='',multiline,opts})=>(
   <div style={{marginBottom:9}}>
     <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
-    {multiline
-      ?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
-          style={{width:'100%',borderRadius:12,border:'1.5px solid #E0E0E0',padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:'white'}}/>
-      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
-          style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:'white'}}/>
-    }
+    {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
+    :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
+        style={{width:'100%',borderRadius:12,border:'1.5px solid #E0E0E0',padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:'white'}}/>
+    :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
+        style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:'white'}}/>}
   </div>
 );
 const PieTabIcon=({active,size=22})=>(
   <div style={{width:size,height:size,borderRadius:'50%',flexShrink:0,
-    background:active
-      ?'conic-gradient(#00ACC1 0% 28%,#F9A825 28% 54%,#4CAF50 54% 76%,#8E24AA 76% 100%)'
-      :'conic-gradient(#B0BEC5 0% 28%,#CFD8DC 28% 54%,#B0BEC5 54% 76%,#CFD8DC 76% 100%)',
-  }}/>
+    background:active?'conic-gradient(#00ACC1 0% 28%,#F9A825 28% 54%,#4CAF50 54% 76%,#8E24AA 76% 100%)':'conic-gradient(#B0BEC5 0% 28%,#CFD8DC 28% 54%,#B0BEC5 54% 76%,#CFD8DC 76% 100%)'}}/>
+);
+const ModalShell=({children,onClose,title})=>(
+  <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+    onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'18px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
+      <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A'}}>{title}</div>
+        <button onClick={onClose} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+      </div>
+      {children}
+    </div>
+  </div>
 );
 
-/* ══════════════ APP ══════════════ */
+/* ── Pie SVG (consumed-only, always 100%) ── */
+const PieSVG=({data})=>{
+  const[hov,setHov]=useState(null);
+  const total=data.reduce((s,d)=>s+d.value,0);
+  if(!total)return<div style={{textAlign:'center',padding:50,color:'#CBD5E1'}}>Sin datos registrados en lo que va de año.</div>;
+  const cx=160,cy=160,R=125,ri=50;let ang=-Math.PI/2;
+  const slices=data.map((d,i)=>{
+    const frac=d.value/total,start=ang,end=ang+frac*2*Math.PI;ang=end;
+    const c1=[Math.cos(start),Math.sin(start)],c2=[Math.cos(end),Math.sin(end)];
+    const large=frac>.5?1:0;
+    return{...d,frac,mid:start+(end-start)/2,path:[
+      `M${cx+ri*c1[0]} ${cy+ri*c1[1]}`,`L${cx+R*c1[0]} ${cy+R*c1[1]}`,
+      `A${R} ${R} 0 ${large} 1 ${cx+R*c2[0]} ${cy+R*c2[1]}`,`L${cx+ri*c2[0]} ${cy+ri*c2[1]}`,
+      `A${ri} ${ri} 0 ${large} 0 ${cx+ri*c1[0]} ${cy+ri*c1[1]}Z`].join(' ')};
+  });
+  const hd=hov!=null?slices[hov]:null;
+  return(
+    <svg viewBox="0 0 320 320" style={{width:'100%',maxHeight:300,display:'block'}}>
+      {slices.map((s,i)=>(
+        <path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth={hov===i?0:1.5}
+          style={{cursor:'pointer',filter:hov===i?`drop-shadow(0 0 8px ${s.color})`:'none',transition:'filter .15s'}}
+          onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)}
+          onTouchStart={()=>setHov(v=>v===i?null:i)}/>
+      ))}
+      {slices.filter(s=>s.frac>.06).map((s,i)=>{
+        const lx=cx+(R+ri)/2*1.1*Math.cos(s.mid),ly=cy+(R+ri)/2*1.1*Math.sin(s.mid);
+        return<text key={i} x={lx} y={ly} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="white" style={{pointerEvents:'none'}}>{s.name}</text>;
+      })}
+      {hd?<>
+        <text x={cx} y={cy-12} textAnchor="middle" fontSize="13" fontWeight="800" fill="#1E293B">{hd.name}</text>
+        <text x={cx} y={cy+6} textAnchor="middle" fontSize="11" fill="#64748B">{hd.total} {hd.unit}</text>
+        <text x={cx} y={cy+24} textAnchor="middle" fontSize="11" fontWeight="700" fill={hd.color}>{(hd.frac*100).toFixed(1)}%</text>
+      </>:<text x={cx} y={cy+5} textAnchor="middle" fontSize="10" fill="#94A3B8">Toca un sector</text>}
+    </svg>
+  );
+};
+
+/* ════════════ APP ════════════ */
 function App(){
   const td=useMemo(()=>{const d=new Date();d.setHours(0,0,0,0);return d;},[]);
   const tk=toKey(td);
 
-  const [loaded,      setLoaded]      = useState(false);
-  const [tab,         setTab]         = useState('cal');
-  const [cv,          setCv]          = useState('week');
-  const [nav,         setNav]         = useState(new Date(td));
-  const [cpts,        setCpts]        = useState(INIT_CPTS);
-  const [ents,        setEnts]        = useState({});
-  const [selDay,      setSelDay]      = useState(null);
-  const [showCP,      setShowCP]      = useState(false);
-  const [sumFilt,     setSumFilt]     = useState('all');
-  const [pat,         setPat]         = useState([]);
-  const [mwDays,      setMwDays]      = useState([]);
-  const [mrDays,      setMrDays]      = useState([]);
-  const [newPat,      setNewPat]      = useState('work');
-  const [mpModal,     setMpModal]     = useState(null);
-  const [mpSel,       setMpSel]       = useState(new Set());
-  const [mpNav,       setMpNav]       = useState(new Date(td));
-  const [agModal,     setAgModal]     = useState(null);
-  const [agAmt,       setAgAmt]       = useState('');
-  const [agTarget,    setAgTarget]    = useState('t');
-  const [addCptModal, setAddCptModal] = useState(false);
-  const [newCpt,      setNewCpt]      = useState({a:'',n:'',t:0,u:'d',c:'#607D8B'});
-  const [exportModal, setExportModal] = useState(false);
-  const [exportJson,  setExportJson]  = useState('');
-  const [importModal, setImportModal] = useState(false);
-  const [importText,  setImportText]  = useState('');
-  const [copyOk,      setCopyOk]      = useState(false);
-  const [saveInd,     setSaveInd]     = useState('');
+  const[profiles,setProfiles]=useState([INIT_PROF()]);
+  const[activeProf,setActiveProf]=useState(0);
+  const[settings,setSettings]=useState(INIT_SET);
+  const[loaded,setLoaded]=useState(false);
 
-  const EF={type:'TRABA',hm:'full',hrs:8,wd:{ind:'',veh:'',os:'',pe:'',notas:''},eh:{d:'',n:'',fd:'',dieta:'none'}};
-  const [form,setForm]=useState(EF);
+  const[tab,setTab]=useState('cal');
+  const[cv,setCv]=useState('week');
+  const[nav,setNav]=useState(new Date(td));
+  const[selDay,setSelDay]=useState(null);
+  const[showCP,setShowCP]=useState(false);
+  const[sumFilt,setSumFilt]=useState('all');
+  const[mpModal,setMpModal]=useState(null);
+  const[mpSel,setMpSel]=useState(new Set());
+  const[mpNav,setMpNav]=useState(new Date(td));
+  const[agModal,setAgModal]=useState(null);
+  const[agAmt,setAgAmt]=useState('');
+  const[agTarget,setAgTarget]=useState('t');
+  const[addCptModal,setAddCptModal]=useState(false);
+  const[newCpt,setNewCpt]=useState({a:'',n:'',t:0,u:'d',c:'#607D8B'});
+  const[exportModal,setExportModal]=useState(false);
+  const[exportJson,setExportJson]=useState('');
+  const[importModal,setImportModal]=useState(false);
+  const[importText,setImportText]=useState('');
+  const[copyOk,setCopyOk]=useState(false);
+  const[saveInd,setSaveInd]=useState('');
+  const[settingsModal,setSettingsModal]=useState(false);
+  const[widgetModal,setWidgetModal]=useState(null);
+  const[newPat,setNewPat]=useState('work');
+  const[form,setForm]=useState(EF);
 
-  /* localStorage load */
+  /* active profile helpers */
+  const prof=profiles[Math.min(activeProf,profiles.length-1)];
+  const{cpts,ents,mrDays,mwDays,pat}=prof;
+  const upd=fn=>setProfiles(ps=>ps.map((p,i)=>i===activeProf?{...p,...fn(p)}:p));
+  const setCpts=fn=>upd(p=>({cpts:typeof fn==='function'?fn(p.cpts):fn}));
+  const setEnts=fn=>upd(p=>({ents:typeof fn==='function'?fn(p.ents):fn}));
+  const setMrDays=fn=>upd(p=>({mrDays:typeof fn==='function'?fn(p.mrDays):fn}));
+  const setMwDays=fn=>upd(p=>({mwDays:typeof fn==='function'?fn(p.mwDays):fn}));
+  const setPat=fn=>upd(p=>({pat:typeof fn==='function'?fn(p.pat):fn}));
+
+  /* localStorage */
   useEffect(()=>{
-    try{
-      const raw=localStorage.getItem('cal_policial');
-      if(raw){const d=JSON.parse(raw);
-        if(d.cpts)   setCpts(d.cpts);
-        if(d.ents)   setEnts(d.ents);
-        if(d.mrDays) setMrDays(d.mrDays);
-        if(d.mwDays) setMwDays(d.mwDays);
-        if(d.pat)    setPat(d.pat);
-      }
-    }catch(e){}
-    setLoaded(true);
+    try{const raw=localStorage.getItem('cal_v4');if(raw){const d=JSON.parse(raw);
+      if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
+      if(d.settings)setSettings({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets});
+    }}catch(e){}setLoaded(true);
   },[]);
-
-  /* localStorage save */
   useEffect(()=>{
     if(!loaded)return;
-    try{
-      localStorage.setItem('cal_policial',JSON.stringify({cpts,ents,mrDays,mwDays,pat}));
-      setSaveInd('✓');setTimeout(()=>setSaveInd(''),1800);
-    }catch(e){}
-  },[cpts,ents,mrDays,mwDays,pat,loaded]);
+    try{localStorage.setItem('cal_v4',JSON.stringify({profiles,activeProf,settings}));
+      setSaveInd('✓');setTimeout(()=>setSaveInd(''),1800);}catch(e){}
+  },[profiles,activeProf,settings,loaded]);
 
+  /* export/import */
   const exportBackup=()=>{
-    const data=JSON.stringify({cpts,ents,mrDays,mwDays,pat,ts:Date.now()},null,2);
+    const data=JSON.stringify({profiles,activeProf,settings,ts:Date.now()},null,2);
     setExportJson(data);setExportModal(true);setCopyOk(false);
     try{navigator.clipboard.writeText(data).then(()=>setCopyOk(true)).catch(()=>{});}catch(e){}
   };
   const doImport=()=>{
-    try{
-      const d=JSON.parse(importText);
-      if(d.cpts)setCpts(d.cpts);if(d.ents)setEnts(d.ents);
-      if(d.mrDays)setMrDays(d.mrDays);if(d.mwDays)setMwDays(d.mwDays);if(d.pat)setPat(d.pat);
-      setImportModal(false);setImportText('');alert('✅ Importado correctamente.');
+    try{const d=JSON.parse(importText);
+      if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
+      if(d.settings)setSettings({...INIT_SET,...d.settings});
+      setImportModal(false);setImportText('');alert('✅ Importado.');
     }catch{alert('❌ JSON no válido.');}
   };
+
+  /* concepts */
   const addConcept=()=>{
     if(!newCpt.a.trim())return;
-    const id='USR_'+Date.now();
-    setCpts(p=>[...p,{id,...newCpt,t:parseFloat(newCpt.t)||0,us:0}]);
+    setCpts(p=>[...p,{id:'USR_'+Date.now(),...newCpt,t:parseFloat(newCpt.t)||0,us:0}]);
     setNewCpt({a:'',n:'',t:0,u:'d',c:'#607D8B'});setAddCptModal(false);
   };
   const removeConcept=id=>{
@@ -251,58 +260,39 @@ function App(){
     setEnts(p=>{const n={...p};Object.keys(n).forEach(k=>{if(n[k].type===id)delete n[k];});return n;});
   };
 
-  const touchX=useRef(null);
-  const handleTouchStart=e=>{touchX.current=e.touches[0].clientX;};
-  const handleTouchEnd=e=>{
-    if(touchX.current===null)return;
-    const diff=e.changedTouches[0].clientX-touchX.current;
-    touchX.current=null;if(Math.abs(diff)<50)return;goNav(diff<0?1:-1);
-  };
-  const goNav=useCallback(dir=>{
-    setNav(prev=>{const d=new Date(prev);
-      if(cv==='day')d.setDate(d.getDate()+dir);
-      else if(cv==='week')d.setDate(d.getDate()+7*dir);
-      else if(cv==='month')d.setMonth(d.getMonth()+dir);
-      else d.setFullYear(d.getFullYear()+dir);
-      return d;
-    });
-  },[cv]);
-
-  const navTitle=useMemo(()=>{
-    if(cv==='day')return `${nav.getDate()} ${MN[nav.getMonth()]} ${nav.getFullYear()}`;
-    if(cv==='week'){const ws=monStart(nav),we=addD(ws,6);return `${ws.getDate()} ${MNS[ws.getMonth()]} – ${we.getDate()} ${MNS[we.getMonth()]} ${we.getFullYear()}`;}
-    if(cv==='month')return `${MN[nav.getMonth()]} ${nav.getFullYear()}`;
-    return `Año ${nav.getFullYear()}`;
-  },[cv,nav]);
-
+  /* year reset */
   const doYearReset=()=>{
     setCpts(prev=>{const g=id=>prev.find(c=>c.id===id);
       return prev.map(c=>{
-        if(c.id==='HLANT')  return{...c,t:+(c.t+Math.max(0,(g('HLIBS')?.t||0)-(g('HLIBS')?.us||0))).toFixed(1)};
-        if(c.id==='ASPAA')  return{...c,t:Math.max(0,(g('ASPAR')?.t||0)-(g('ASPAR')?.us||0)),us:0};
-        if(c.id==='CFANT')  return{...c,t:Math.max(0,(g('FEST2431')?.t||0)-(g('FEST2431')?.us||0))+Math.max(0,(g('CFEST')?.t||0)-(g('CFEST')?.us||0)),us:0};
+        if(c.id==='HLANT')return{...c,t:+(c.t+Math.max(0,(g('HLIBS')?.t||0)-(g('HLIBS')?.us||0))).toFixed(1)};
+        if(c.id==='ASPAA')return{...c,t:Math.max(0,(g('ASPAR')?.t||0)-(g('ASPAR')?.us||0)),us:0};
+        if(c.id==='CFANT')return{...c,t:Math.max(0,(g('FEST2431')?.t||0)-(g('FEST2431')?.us||0))+Math.max(0,(g('CFEST')?.t||0)-(g('CFEST')?.us||0)),us:0};
         if(c.id==='HFCNOAÑ')return{...c,t:Math.max(0,(g('HFCNO')?.t||0)-(g('HFCNO')?.us||0)),us:0};
         return{...c,us:0};
       });
     });setEnts({});
   };
 
+  /* getDI */
   const getDI=useCallback(dk=>{
-    if(mrDays.includes(dk))return{c:FC_REST,l:'FEST.D',t:'mr',pct:100};
-    if(mwDays.includes(dk))return{c:FC_WORK,l:'F.OBL',t:'MWDAY',pct:100};
+    if(mrDays.includes(dk))return{c:FC_REST,l:'FEST.D',pct:100};
+    if(mwDays.includes(dk))return{c:FC_WORK,l:'F.OBL',pct:100};
     const e=ents[dk];if(!e)return null;
-    if(e.type==='TRABA')    return{c:TC,l:'TRABA',t:'TRABA',pct:100};
-    if(e.type==='LIBRE')    return{c:LC,l:'LIBRE',t:'LIBRE',pct:100};
-    if(e.type==='FEST_REST')return{c:FC_REST,l:'FEST.D',t:'fr',pct:100};
+    if(e.type==='TRABA')return{c:TC,l:'TRABA',pct:100};
+    if(e.type==='LIBRE')return{c:LC,l:'LIBRE',pct:100};
+    if(e.type==='FEST_REST')return{c:FC_REST,l:'FEST.D',pct:100};
     const cp=cpts.find(c=>c.id===e.type);if(!cp)return null;
     const suf=e.hm==='salida'?'↑':e.hm==='entrada'?'↓':'';
     const pct=e.hm==='full'?100:Math.round(((parseFloat(e.hrs)||0)/8)*100);
-    return{c:cp.c,l:cp.a+suf,t:e.type,pct};
+    return{c:cp.c,l:cp.a+suf,pct};
   },[ents,mrDays,mwDays,cpts]);
 
+  /* day edit */
   const openDay=dk=>{
     const e=ents[dk];
-    setForm(e?{type:e.type,hm:e.hm||'full',hrs:e.hrs||8,wd:e.wd||EF.wd,eh:e.eh||EF.eh}:{...EF});
+    setForm(e?{type:e.type||'TRABA',hm:e.hm||'full',hrs:e.hrs||8,
+      wd:e.wd||EF.wd,eh:e.eh||EF.eh,
+      juicio:e.juicio?{...EF.juicio,...e.juicio}:{...EF.juicio}}:{...EF,juicio:{...EF.juicio}});
     setSelDay(dk);
   };
   const saveEntry=()=>{
@@ -316,7 +306,7 @@ function App(){
       const nc=cpts.find(c=>c.id===nType);
       if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
     }
-    setEnts(p=>({...p,[selDay]:{type:form.type,hm:form.hm,hrs:form.hrs,wd:{...form.wd},eh:{...form.eh}}}));
+    setEnts(p=>({...p,[selDay]:{type:form.type,hm:form.hm,hrs:form.hrs,wd:{...form.wd},eh:{...form.eh},juicio:{...form.juicio}}}));
     setSelDay(null);
   };
   const delEntry=()=>{
@@ -328,6 +318,8 @@ function App(){
     }
     setEnts(p=>{const n={...p};delete n[selDay];return n;});setSelDay(null);
   };
+
+  /* pattern */
   const applyPat=()=>{
     if(!pat.length)return;
     const year=td.getFullYear(),ne={...ents};
@@ -336,48 +328,85 @@ function App(){
       const dk=toKey(cur);
       if(!mrDays.includes(dk)&&!mwDays.includes(dk)){
         const pt=pat[pi%pat.length];
-        ne[dk]={type:pt==='work'?'TRABA':'LIBRE',hm:'full',hrs:pt==='work'?8:0,wd:EF.wd,eh:EF.eh};
+        ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0};
       }
       pi++;cur=addD(cur,1);
     }
     setEnts(ne);setTab('cal');
   };
 
-  const workedCount=useMemo(()=>
-    Object.entries(ents).filter(([dk,e])=>(e.type==='TRABA'||mwDays.includes(dk))&&fromKey(dk)<=td).length
-  ,[ents,mwDays,td]);
+  /* swipe */
+  const touchX=useRef(null);
+  const hTS=e=>{touchX.current=e.touches[0].clientX;};
+  const hTE=e=>{if(touchX.current==null)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)<50)return;goNav(diff<0?1:-1);};
+  const goNav=useCallback(dir=>{setNav(prev=>{const d=new Date(prev);
+    if(cv==='day')d.setDate(d.getDate()+dir);else if(cv==='week')d.setDate(d.getDate()+7*dir);
+    else if(cv==='month')d.setMonth(d.getMonth()+dir);else d.setFullYear(d.getFullYear()+dir);return d;
+  });},[cv]);
+  const navTitle=useMemo(()=>{
+    if(cv==='day')return`${nav.getDate()} ${MN[nav.getMonth()]} ${nav.getFullYear()}`;
+    if(cv==='week'){const ws=monStart(nav),we=addD(ws,6);return`${ws.getDate()} ${MNS[ws.getMonth()]} – ${we.getDate()} ${MNS[we.getMonth()]} ${we.getFullYear()}`;}
+    if(cv==='month')return`${MN[nav.getMonth()]} ${nav.getFullYear()}`;
+    return`Año ${nav.getFullYear()}`;
+  },[cv,nav]);
 
-  const pieData=useMemo(()=>{
-    const base=cpts.filter(c=>c.t>0).map(c=>({name:c.a,value:+(c.t/(c.u==='H'?8:1)).toFixed(2),color:c.c,full:c.n,total:c.t,unit:c.u}));
-    if(workedCount>0)base.unshift({name:'TRABA',value:workedCount,color:TC,full:'Días trabajados',total:workedCount,unit:'d'});
-    return base;
-  },[cpts,workedCount]);
+  /* computed */
+  const consumedPie=useMemo(()=>{
+    const counts={};
+    Object.entries(ents).filter(([dk])=>fromKey(dk)<=td).forEach(([dk,e])=>{
+      const type=mrDays.includes(dk)||mwDays.includes(dk)?'TRABA':e.type;
+      const val=e.hm!=='full'?(parseFloat(e.hrs)||0)/8:1;
+      counts[type]=(counts[type]||0)+val;
+    });
+    const r=[];
+    Object.entries(counts).forEach(([type,val])=>{
+      if(type==='TRABA')r.push({name:'TRABA',value:val,color:TC,full:'Días trabajados',total:Math.round(val),unit:'d'});
+      else if(type==='LIBRE')r.push({name:'LIBRE',value:val,color:LC,full:'Días libres',total:Math.round(val),unit:'d'});
+      else if(type==='FEST_REST')r.push({name:'FEST.D',value:val,color:FC_REST,full:'Festivos',total:Math.round(val),unit:'d'});
+      else{const cp=cpts.find(c=>c.id===type);if(cp)r.push({name:cp.a,value:val,color:cp.c,full:cp.n,total:cp.u==='H'?+(val*8).toFixed(1):+val.toFixed(1),unit:cp.u});}
+    });
+    return r.filter(d=>d.value>0).sort((a,b)=>b.value-a.value);
+  },[ents,mrDays,mwDays,td,cpts]);
 
-  const cntSaldo  =useMemo(()=>cpts.filter(c=>c.t>0&&c.us<c.t).length,[cpts]);
+  const overtimeRows=useMemo(()=>
+    Object.entries(ents).filter(([dk,e])=>fromKey(dk)<=td&&e.eh&&(parseFloat(e.eh.d)||parseFloat(e.eh.n)||parseFloat(e.eh.fd)))
+      .map(([dk,e])=>({dk,d:parseFloat(e.eh.d)||0,n:parseFloat(e.eh.n)||0,fd:parseFloat(e.eh.fd)||0,
+        dieta:e.eh.dieta||'none',
+        total:(parseFloat(e.eh.d)||0)+(parseFloat(e.eh.n)||0)+(parseFloat(e.eh.fd)||0)+(e.eh.dieta==='media'?.5:e.eh.dieta==='completa'?1:0)}))
+      .sort((a,b)=>a.dk.localeCompare(b.dk))
+  ,[ents,td]);
+  const overtimeTotal=useMemo(()=>overtimeRows.reduce((s,x)=>s+x.total,0),[overtimeRows]);
+
+  const trialsAll=useMemo(()=>Object.entries(ents).filter(([,e])=>e.juicio?.active)
+    .map(([dk,e])=>({dk,dateObj:fromKey(dk),...e.juicio})).sort((a,b)=>a.dk.localeCompare(b.dk)),[ents]);
+  const trialsDone=useMemo(()=>trialsAll.filter(t=>t.dateObj<=td),[trialsAll,td]);
+  const trialsFuture=useMemo(()=>trialsAll.filter(t=>t.dateObj>td),[trialsAll,td]);
+
+  const totalDaysRem=useMemo(()=>cpts.filter(c=>c.u==='d'&&c.t>0&&c.us<c.t).reduce((s,c)=>s+(c.t-c.us),0),[cpts]);
+  const totalHoursRem=useMemo(()=>cpts.filter(c=>c.u==='H'&&c.t>0&&c.us<c.t).reduce((s,c)=>s+(c.t-c.us),0),[cpts]);
   const cntAgotado=useMemo(()=>cpts.filter(c=>c.t>0&&c.us>=c.t).length,[cpts]);
   const visibleCpts=useMemo(()=>{
-    if(sumFilt==='saldo')  return cpts.filter(c=>c.t>0&&c.us<c.t);
+    if(sumFilt==='saldo')return cpts.filter(c=>c.u==='d'&&c.t>0&&c.us<c.t);
+    if(sumFilt==='horas')return cpts.filter(c=>c.u==='H'&&c.t>0&&c.us<c.t);
     if(sumFilt==='agotado')return cpts.filter(c=>c.t>0&&c.us>=c.t);
     return cpts;
   },[cpts,sumFilt]);
 
-  const selCpt   =!['TRABA','LIBRE','FEST_REST'].includes(form.type)?cpts.find(c=>c.id===form.type):null;
+  const selCpt=!['TRABA','LIBRE','FEST_REST'].includes(form.type)?cpts.find(c=>c.id===form.type):null;
   const isHourCpt=selCpt?.u==='H';
   const selDateObj=selDay?fromKey(selDay):null;
-  const openAgModal=(id,target='t')=>{setAgModal(id);setAgAmt('');setAgTarget(target);};
 
-  /* Day Cell */
+  /* ── sub-components ── */
   const DayCell=({dk,weekMode})=>{
     const dateObj=fromKey(dk),num=dateObj.getDate();
     const isT=dk===tk,di=getDI(dk),dow=dateObj.getDay(),isWE=dow===0||dow===6;
     const hasExt=ents[dk]?.eh&&(ents[dk].eh.d||ents[dk].eh.n||ents[dk].eh.fd);
+    const hasJ=ents[dk]?.juicio?.active;
     const pct=di?.pct??0,partial=di&&pct<100,full=di&&pct>=100;
-    const cellBg=full?di.c:isT?'#DBEAFE':'#FAFAFA';
-    const numCol=full?'rgba(255,255,255,.93)':partial?'#1E293B':isT?'#1D4ED8':isWE?'#DC2626':'#374151';
     return(
       <div onClick={()=>openDay(dk)}
-        style={{background:cellBg,border:isT?'2px solid #1D4ED8':'1px solid #E5E7EB',borderRadius:10,
-          cursor:'pointer',minHeight:weekMode?92:50,padding:'5px 3px',
+        style={{background:full?di.c:isT?'#DBEAFE':'#FAFAFA',border:isT?'2px solid #1D4ED8':'1px solid #E5E7EB',
+          borderRadius:10,cursor:'pointer',minHeight:weekMode?92:50,padding:'5px 3px',
           display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',
           boxShadow:di?'0 2px 8px rgba(0,0,0,.18)':'0 1px 2px rgba(0,0,0,.05)',
           overflow:'hidden',userSelect:'none',transition:'transform .12s',position:'relative'}}
@@ -385,600 +414,750 @@ function App(){
         onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
       >
         {partial&&<div style={{position:'absolute',bottom:0,left:0,right:0,height:`${pct}%`,background:di.c,opacity:.82,borderRadius:'0 0 8px 8px'}}/>}
-        <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,color:numCol,lineHeight:1.2,position:'relative',zIndex:1}}>{num}</span>
-        {di&&<span style={{fontSize:7,fontWeight:700,color:full||pct>55?'rgba(255,255,255,.93)':'#1E293B',
+        <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,
+          color:full?'rgba(255,255,255,.93)':partial?'#1E293B':isT?'#1D4ED8':isWE?'#DC2626':'#374151',
+          lineHeight:1.2,position:'relative',zIndex:1}}>{num}</span>
+        {di&&<span style={{fontSize:7,fontWeight:700,color:(full||pct>55)?'rgba(255,255,255,.93)':'#1E293B',
           background:full?'rgba(0,0,0,.2)':`${di.c}bb`,borderRadius:6,padding:'1px 4px',marginTop:2,
-          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',position:'relative',zIndex:1}}>
-          {di.l}</span>}
+          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',position:'relative',zIndex:1}}>{di.l}</span>}
         {hasExt&&<div style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#FDE047',zIndex:2}}/>}
+        {hasJ&&<div style={{position:'absolute',top:3,left:3,width:5,height:5,borderRadius:'50%',background:'#8B5CF6',zIndex:2}}/>}
       </div>
     );
   };
 
-  const WeekView=()=>{
-    const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));
-    return(<div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
-        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':'#6B7280',padding:'3px 0'}}>{d}</div>)}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
-        {days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}
-      </div>
-    </div>);
-  };
-  const MonthView=()=>{
-    const y=nav.getFullYear(),m=nav.getMonth();
-    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-    const cells=[];
-    for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);
-    for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
-    return(<div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div>
-    </div>);
-  };
-  const DayViewFull=()=>{
-    const dk=toKey(nav),di=getDI(dk),e=ents[dk];
-    return(<div>
-      <div style={{background:di?`linear-gradient(140deg,${di.c}ee,${di.c}99)`:'linear-gradient(140deg,#E2E8F0,#CBD5E1)',borderRadius:20,padding:20,marginBottom:14,boxShadow:'0 4px 20px rgba(0,0,0,.12)'}}>
-        <div style={{fontSize:26,fontWeight:800,color:di?'white':'#1E293B'}}>{nav.getDate()} {MN[nav.getMonth()]}</div>
-        <div style={{fontSize:13,color:di?'rgba(255,255,255,.75)':'#64748B',marginTop:2}}>{DNF[nav.getDay()]} · {nav.getFullYear()}</div>
-        {di&&<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>}
-        {!di&&<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
-      </div>
-      {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(
-        <Card><SecTitle icon="📋">Datos del servicio</SecTitle>
-          {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
-            <div key={k} style={{marginBottom:5,fontSize:12}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
-          ))}
-        </Card>
-      )}
-      {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(
-        <Card bg='#FFFBEB'><SecTitle icon="⏰">Horas extraordinarias</SecTitle>
-          {e.eh.d&&<div style={{fontSize:12,marginBottom:3}}>🌤 Diurnas: <b>{e.eh.d}h</b></div>}
-          {e.eh.n&&<div style={{fontSize:12,marginBottom:3}}>🌙 Nocturnas: <b>{e.eh.n}h</b></div>}
-          {e.eh.fd&&<div style={{fontSize:12,marginBottom:3}}>🎉 Festiva/Dom: <b>{e.eh.fd}h</b></div>}
-          {e.eh.dieta!=='none'&&<div style={{fontSize:12}}>🍽 Dieta: <b>{e.eh.dieta==='media'?'Media (+0.5h)':'Completa (+1h)'}</b></div>}
-        </Card>
-      )}
-      <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
-    </div>);
-  };
-  const YearView=()=>{
-    const y=nav.getFullYear();
-    return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-      {MNS.map((ms,mi)=>{
-        const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-        return(<div key={mi} style={{background:'white',borderRadius:12,padding:8,boxShadow:'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
-          onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
-          <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
-            {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
-            {[...Array(ld.getDate())].map((_,i)=>{
-              const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
-              return(<div key={i} onClick={e=>{e.stopPropagation();setNav(new Date(dk));setCv('day');}}
-                style={{aspectRatio:'1',background:di?di.c:isT?'#BFDBFE':'transparent',borderRadius:2,
-                  display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
-                  border:isT?'1px solid #1D4ED8':'none',color:di?'white':'#6B7280',fontWeight:isT?800:400}}>
-                {i+1}
-              </div>);
-            })}
-          </div>
-        </div>);
-      })}
-    </div>);
-  };
+  const WeekView=()=>{const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));return(<div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
+      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':'#6B7280',padding:'3px 0'}}>{d}</div>)}
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>{days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}</div>
+  </div>);};
+
+  const MonthView=()=>{const y=nav.getFullYear(),m=nav.getMonth();const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;const cells=[];
+    for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
+    return(<div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+    </div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div></div>);};
+
+  const DayViewFull=()=>{const dk=toKey(nav),di=getDI(dk),e=ents[dk];return(<div>
+    <div style={{background:di?`linear-gradient(140deg,${di.c}ee,${di.c}99)`:'linear-gradient(140deg,#E2E8F0,#CBD5E1)',borderRadius:20,padding:20,marginBottom:14,boxShadow:'0 4px 20px rgba(0,0,0,.12)'}}>
+      <div style={{fontSize:26,fontWeight:800,color:di?'white':'#1E293B'}}>{nav.getDate()} {MN[nav.getMonth()]}</div>
+      <div style={{fontSize:13,color:di?'rgba(255,255,255,.75)':'#64748B',marginTop:2}}>{DNF[nav.getDay()]} · {nav.getFullYear()}</div>
+      {di?<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>
+        :<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
+    </div>
+    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(
+      <Card><STitle icon="📋">Datos del servicio</STitle>
+        {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
+          <div key={k} style={{marginBottom:5,fontSize:12}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
+        ))}
+      </Card>
+    )}
+    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(
+      <Card bg='#FFFBEB'><STitle icon="⏰">Horas extraordinarias</STitle>
+        {e.eh.d&&<div style={{fontSize:12,marginBottom:3}}>🌤 Diurnas: <b>{e.eh.d}h</b></div>}
+        {e.eh.n&&<div style={{fontSize:12,marginBottom:3}}>🌙 Nocturnas: <b>{e.eh.n}h</b></div>}
+        {e.eh.fd&&<div style={{fontSize:12,marginBottom:3}}>🎉 Festiva/Dom: <b>{e.eh.fd}h</b></div>}
+        {e.eh.dieta!=='none'&&<div style={{fontSize:12}}>🍽 Dieta: <b>{e.eh.dieta==='media'?'Media (+0.5h)':'Completa (+1h)'}</b></div>}
+      </Card>
+    )}
+    {e?.juicio?.active&&(
+      <Card bg='#F3E8FF'><STitle icon="⚖️">Juicio</STitle>
+        {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
+          <div key={k} style={{marginBottom:4,fontSize:12}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
+        ))}
+      </Card>
+    )}
+    <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
+  </div>);};
+
+  const YearView=()=>{const y=nav.getFullYear();return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+    {MNS.map((ms,mi)=>{const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+      return(<div key={mi} style={{background:'white',borderRadius:12,padding:8,boxShadow:'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
+        onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
+        <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
+          {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
+          {[...Array(ld.getDate())].map((_,i)=>{const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
+            return(<div key={i} onClick={e2=>{e2.stopPropagation();setNav(new Date(dk));setCv('day');}}
+              style={{aspectRatio:'1',background:di?di.c:isT?'#BFDBFE':'transparent',borderRadius:2,
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
+                border:isT?'1px solid #1D4ED8':'none',color:di?'white':'#6B7280',fontWeight:isT?800:400}}>{i+1}</div>);
+          })}
+        </div>
+      </div>);
+    })}
+  </div>);};
+
   const LegendBar=()=>(
     <div style={{marginTop:14,background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.06)'}}>
-      <div style={{fontSize:10,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda</div>
+      <div style={{fontSize:10,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda · 🟡 H.Extra · 🟣 Juicio</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
         {[{c:TC,l:'TRABA'},{c:LC,l:'LIBRE'},{c:FC_WORK,l:'F.OBL'},{c:FC_REST,l:'FEST.D'},...cpts.map(c=>({c:c.c,l:c.a}))].map((x,i)=>(
           <div key={i} style={{display:'flex',alignItems:'center',gap:3}}>
-            <div style={{width:9,height:9,borderRadius:2,background:x.c,flexShrink:0}}/>
-            <span style={{fontSize:8,color:'#6B7280',fontWeight:600}}>{x.l}</span>
+            <div style={{width:9,height:9,borderRadius:2,background:x.c,flexShrink:0}}/><span style={{fontSize:8,color:'#6B7280',fontWeight:600}}>{x.l}</span>
           </div>
         ))}
       </div>
     </div>
   );
 
-  if(!loaded)return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#F1F5F9',flexDirection:'column',gap:14}}>
-      <div style={{fontSize:42}}>👮</div>
-      <div style={{fontSize:14,color:'#64748B'}}>Cargando calendario…</div>
-    </div>
-  );
+  const CalWidgets=()=>{
+    const ws=settings.widgets;
+    const ow=ws.find(w=>w.id==='overtime'),td2=ws.find(w=>w.id==='trials_done'),tf=ws.find(w=>w.id==='trials_future');
+    const vis=[ow?.show&&ow,td2?.show&&td2,tf?.show&&tf].filter(Boolean);
+    if(!vis.length)return null;
+    return(<div style={{display:'grid',gridTemplateColumns:`repeat(${vis.length},1fr)`,gap:8,marginTop:14}}>
+      {ow?.show&&<div onClick={()=>setWidgetModal('overtime')}
+        style={{background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{ow.name}</div>
+        <div style={{fontSize:19,fontWeight:800,color:'#F59E0B'}}>{overtimeTotal.toFixed(1)}h</div>
+      </div>}
+      {td2?.show&&<div onClick={()=>setWidgetModal('trials_done')}
+        style={{background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{td2.name}</div>
+        <div style={{fontSize:19,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
+      </div>}
+      {tf?.show&&<div onClick={()=>setWidgetModal('trials_future')}
+        style={{background:trialsFuture.length>0?'#F3E8FF':'white',borderRadius:14,padding:10,
+          boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center',
+          border:trialsFuture.length>0?'2px solid #8B5CF6':'2px solid transparent'}}>
+        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{tf.name}</div>
+        <div style={{fontSize:19,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
+        {trialsFuture.length>0&&<div style={{fontSize:8,color:'#8B5CF6',marginTop:1}}>Próx: {trialsFuture[0].dk.slice(5)}</div>}
+      </div>}
+    </div>);
+  };
 
-  /* ════ RENDER ════ */
+  if(!loaded)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#F1F5F9',flexDirection:'column',gap:14}}>
+    <LogoPM size={60}/><div style={{fontSize:14,color:'#64748B'}}>Cargando…</div></div>);
+
+  const hCol=settings.headerColor||'#1C1C2E';
+
+  /* ══════ RENDER ══════ */
   return(
-    <div style={{fontFamily:'system-ui,sans-serif',background:'#F1F5F9',minHeight:'100vh',width:'100%',paddingBottom:80}}>
+  <div style={{fontFamily:'system-ui,sans-serif',background:'#F1F5F9',minHeight:'100vh',width:'100%',paddingBottom:80}}>
 
-      {/* HEADER */}
-      <div style={{background:'linear-gradient(135deg,#1C1C2E,#2D2D44)',color:'white',padding:'13px 12px',boxShadow:'0 4px 16px rgba(0,0,0,.35)',position:'sticky',top:0,zIndex:20}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:15,fontWeight:800,letterSpacing:-.3,display:'flex',alignItems:'center',gap:8}}>
-              👮 Calendario Policial
-              {saveInd&&<span style={{fontSize:10,color:'#4ADE80',fontWeight:600}}>{saveInd} Guardado</span>}
-            </div>
-            <div style={{fontSize:9,opacity:.5,marginTop:1}}>{td.getFullYear()}</div>
+  {/* HEADER */}
+  <div style={{background:hCol,color:'white',padding:'10px 12px',boxShadow:'0 4px 16px rgba(0,0,0,.35)',position:'sticky',top:0,zIndex:20}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+        <RenderLogo type={settings.logoType} size={34}/>
+        <div>
+          <div style={{fontSize:13,fontWeight:800,letterSpacing:-.3,lineHeight:1.2,display:'flex',alignItems:'center',gap:6}}>
+            Calendario Policial{saveInd&&<span style={{fontSize:9,color:'#4ADE80',fontWeight:600}}>{saveInd}</span>}
           </div>
-          <div style={{display:'flex',gap:5,flexShrink:0}}>
-            {[['⬇ Export',exportBackup],['⬆ Import',()=>{setImportText('');setImportModal(true);}],['📋',()=>setShowCP(true)]].map(([l,fn])=>(
-              <button key={l} onClick={fn} style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:18,padding:'6px 10px',color:'white',fontSize:10,cursor:'pointer',fontWeight:700}}>{l}</button>
-            ))}
-          </div>
+          <div style={{fontSize:9,opacity:.5}}>{prof.name} · {td.getFullYear()}</div>
         </div>
       </div>
+      <div style={{display:'flex',gap:4,flexShrink:0,alignItems:'center'}}>
+        {[['⬇',exportBackup],['⬆',()=>{setImportText('');setImportModal(true);}],['📋',()=>setShowCP(true)]].map(([l,fn])=>(
+          <button key={l} onClick={fn} style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:l==='📋'?14:10,cursor:'pointer',fontWeight:700}}>{l}</button>
+        ))}
+        <button onClick={()=>setSettingsModal(true)} style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:16,cursor:'pointer',lineHeight:1}}>⚙️</button>
+      </div>
+    </div>
+  </div>
 
-      {/* CALENDAR */}
-      {tab==='cal'&&(
-        <div style={{padding:12}}>
-          <div style={{display:'flex',gap:3,marginBottom:12,background:'#E2E8F0',borderRadius:24,padding:3}}>
-            {[['day','Día'],['week','Semana'],['month','Mes'],['year','Año']].map(([v,l])=>(
-              <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':'#64748B',fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .2s'}}>{l}</button>
-            ))}
-          </div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:'white',borderRadius:24,padding:'3px 6px',boxShadow:'0 1px 5px rgba(0,0,0,.07)'}}>
-            <button onClick={()=>goNav(-1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>‹</button>
-            <span style={{fontSize:12,fontWeight:700,color:'#1E293B'}}>{navTitle}</span>
-            <button onClick={()=>goNav(1)}  style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>›</button>
-          </div>
-          <div style={{textAlign:'right',marginBottom:10}}>
-            <button onClick={()=>{setNav(new Date(td));setCv('week');}} style={{background:'none',border:'1.5px solid #1D4ED8',borderRadius:16,padding:'4px 13px',fontSize:11,color:'#1D4ED8',cursor:'pointer',fontWeight:700}}>Hoy</button>
-          </div>
-          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            {cv==='day'   &&<DayViewFull/>}
-            {cv==='week'  &&<WeekView/>}
-            {cv==='month' &&<MonthView/>}
-            {cv==='year'  &&<YearView/>}
-          </div>
-          {cv!=='day'&&<LegendBar/>}
-        </div>
-      )}
+  {/* ═══ CALENDAR ═══ */}
+  {tab==='cal'&&(
+    <div style={{padding:12}}>
+      <div style={{display:'flex',gap:3,marginBottom:12,background:'#E2E8F0',borderRadius:24,padding:3}}>
+        {[['day','Día'],['week','Semana'],['month','Mes'],['year','Año']].map(([v,l])=>(
+          <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':'#64748B',fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .2s'}}>{l}</button>
+        ))}
+      </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:'white',borderRadius:24,padding:'3px 6px',boxShadow:'0 1px 5px rgba(0,0,0,.07)'}}>
+        <button onClick={()=>goNav(-1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>‹</button>
+        <span style={{fontSize:12,fontWeight:700,color:'#1E293B'}}>{navTitle}</span>
+        <button onClick={()=>goNav(1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>›</button>
+      </div>
+      <div style={{textAlign:'right',marginBottom:10}}>
+        <button onClick={()=>{setNav(new Date(td));setCv('week');}} style={{background:'none',border:'1.5px solid #1D4ED8',borderRadius:16,padding:'4px 13px',fontSize:11,color:'#1D4ED8',cursor:'pointer',fontWeight:700}}>Hoy</button>
+      </div>
+      <div onTouchStart={hTS} onTouchEnd={hTE}>
+        {cv==='day'&&<DayViewFull/>}{cv==='week'&&<WeekView/>}{cv==='month'&&<MonthView/>}{cv==='year'&&<YearView/>}
+      </div>
+      {cv!=='day'&&<><LegendBar/><CalWidgets/></>}
+    </div>
+  )}
 
-      {/* RESUMEN */}
-      {tab==='sum'&&(
-        <div style={{padding:12}}>
-          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>📊 Resumen de conceptos</div>
-          <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,flex:1}}>
-              {[{k:'saldo',l:'Con saldo',v:cntSaldo,c:'#16A34A'},{k:'agotado',l:'Agotados',v:cntAgotado,c:'#DC2626'}].map(s=>(
-                <button key={s.k} onClick={()=>setSumFilt(f=>f===s.k?'all':s.k)}
-                  style={{background:sumFilt===s.k?s.c:'white',borderRadius:14,padding:'11px 6px',textAlign:'center',boxShadow:'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.c}`:'2px solid transparent',cursor:'pointer',transition:'all .2s'}}>
-                  <div style={{fontSize:22,fontWeight:800,color:sumFilt===s.k?'white':s.c}}>{s.v}</div>
-                  <div style={{fontSize:9,color:sumFilt===s.k?'rgba(255,255,255,.8)':'#94A3B8',fontWeight:600,marginTop:2}}>{s.l}</div>
-                </button>
-              ))}
-            </div>
-            <button onClick={()=>setAddCptModal(true)}
-              style={{background:'#1D4ED8',border:'none',borderRadius:14,width:46,height:46,flexShrink:0,color:'white',fontSize:24,cursor:'pointer',boxShadow:'0 2px 8px #1D4ED844',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
-          </div>
-          {sumFilt!=='all'&&<div style={{textAlign:'center',marginBottom:10}}><button onClick={()=>setSumFilt('all')} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:16,padding:'4px 14px',fontSize:11,color:'#64748B',cursor:'pointer'}}>Ver todos</button></div>}
-          {visibleCpts.map(c=>{
-            const isCarryBoth=c.carryover==='both',isCO=c.carryover===true;
-            const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
-            return(
-              <div key={c.id} style={{marginBottom:8,background:isCarryBoth?'#FFF8F0':isCO?'#F0FDF4':'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.07)',borderLeft:`4px solid ${c.c}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-                  <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                    <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
-                    {c.ag&&<span style={{fontSize:8,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AUTO</span>}
-                    {isCarryBoth&&<span style={{fontSize:8,background:'#FFE0B2',color:'#E65100',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AÑO ANT.</span>}
-                    {isCO&&<span style={{fontSize:8,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 6px',fontWeight:700}}>TRASPASO</span>}
-                    {(c.ag||isCO||isCarryBoth)&&<button onClick={()=>openAgModal(c.id,'t')} style={{fontSize:8,background:'#DCFCE7',color:'#15803D',border:'none',borderRadius:8,padding:'1px 7px',cursor:'pointer',fontWeight:700}}>✏️ Total</button>}
-                    {isCarryBoth&&<button onClick={()=>openAgModal(c.id,'us')} style={{fontSize:8,background:'#FDECEA',color:'#C62828',border:'none',borderRadius:8,padding:'1px 7px',cursor:'pointer',fontWeight:700}}>✏️ Usados</button>}
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <div style={{textAlign:'right',fontSize:11,flexShrink:0}}>
-                      <span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span>
-                      <span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span>
-                    </div>
-                    {c.id.startsWith('USR_')&&<button onClick={()=>{if(window.confirm(`¿Eliminar "${c.a}"?`))removeConcept(c.id);}} style={{background:'#FEF2F2',border:'none',borderRadius:8,padding:'3px 7px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑</button>}
-                  </div>
-                </div>
-                <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:6}}>{c.n}</div>
-                {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
-                {c.t===0&&<div style={{fontSize:10,color:'#CBD5E1',marginTop:3,fontStyle:'italic'}}>Sin total asignado</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* PATRÓN */}
-      {tab==='pat'&&(
-        <div style={{padding:12}}>
-          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>🔄 Patrón de trabajo</div>
-          <Card>
-            <SecTitle icon="🔢">Secuencia de días</SecTitle>
-            <p style={{fontSize:11,color:'#94A3B8',marginBottom:10,lineHeight:1.6}}>Toca un badge para eliminarlo.</p>
-            <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:'#F8FAFC',borderRadius:12,marginBottom:12}}>
-              {pat.map((d,i)=>(
-                <span key={i} onClick={()=>setPat(p=>p.filter((_,idx)=>idx!==i))}
-                  style={{background:d==='work'?TC:LC,color:'white',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                  {d==='work'?'T':'L'} ✕
-                </span>
-              ))}
-              {!pat.length&&<span style={{fontSize:11,color:'#CBD5E1',alignSelf:'center',marginLeft:4}}>Sin patrón</span>}
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <select value={newPat} onChange={e=>setNewPat(e.target.value)}
-                style={{flex:1,borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-                <option value="work">● TRABAJO</option>
-                <option value="rest">○ LIBRE</option>
-              </select>
-              <Btn small onClick={()=>setPat(p=>[...p,newPat])}>+ Añadir</Btn>
-            </div>
-          </Card>
-          {[
-            {key:'mw',bg:'#FFF5F5',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays,desc:'rojo'},
-            {key:'mr',bg:'#F0FDF4',icon:'🟢',title:'Festivos de obligado descanso', color:FC_REST,days:mrDays,setDays:setMrDays,desc:'verde'},
-          ].map(({key,bg,icon,title,color,days,setDays,desc})=>(
-            <Card key={key} bg={bg}>
-              <SecTitle icon={icon}>{title}</SecTitle>
-              <p style={{fontSize:10,color:'#94A3B8',marginBottom:10}}>Aparecen en <b style={{color}}>color {desc}</b> en el calendario.</p>
-              <Btn full color={color} onClick={()=>{setMpModal(key);setMpSel(new Set(days));setMpNav(new Date(td));}}>
-                📅 Seleccionar fechas en calendario
-              </Btn>
-              {days.length>0&&(
-                <div style={{marginTop:10}}>
-                  <div style={{fontSize:10,fontWeight:700,color:'#64748B',marginBottom:5}}>{days.length} día(s) · toca para eliminar</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                    {[...days].sort().map(d=>(
-                      <span key={d} onClick={()=>setDays(p=>p.filter(x=>x!==d))}
-                        style={{background:color,color:'white',borderRadius:12,padding:'3px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>
-                        {d.slice(5)} ✕
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
-          ))}
-          <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
-          <div style={{height:1,background:'#E2E8F0',margin:'16px 0'}}/>
-          <Card bg='#FFF7ED'>
-            <SecTitle icon="🗓">Reinicio de año</SecTitle>
-            <p style={{fontSize:11,color:'#92400E',marginBottom:10,lineHeight:1.5}}>
-              Traspasos: <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b>
-            </p>
-            <Btn full color='#C2410C' onClick={()=>{if(window.confirm('¿Confirmar reinicio de año con traspasos?'))doYearReset();}}>
-              🔁 Reinicio de año nuevo
-            </Btn>
-          </Card>
-        </div>
-      )}
-
-      {/* GRÁFICA */}
-      {tab==='chart'&&(
-        <div style={{padding:12}}>
-          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>Distribución · Totales</div>
-          <Card bg='#EFF6FF'>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <div style={{width:44,height:44,borderRadius:'50%',background:TC,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>👮</div>
-              <div>
-                <div style={{fontSize:24,fontWeight:800,color:'#1D4ED8'}}>{workedCount}</div>
-                <div style={{fontSize:11,color:'#64748B'}}>Días trabajados en {td.getFullYear()}</div>
-              </div>
-            </div>
-          </Card>
-          {pieData.length===0
-            ?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:'#CBD5E1',marginTop:10}}>Sin totales configurados.</p></div>
-            :<>
-              <Card><PieSVG data={pieData}/></Card>
-              <Card>
-                {pieData.map((d,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<pieData.length-1?'1px solid #F1F5F9':'none'}}>
-                    <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:11,fontWeight:700,color:'#1E293B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</div>
-                      <div style={{fontSize:9,color:'#94A3B8'}}>{d.full.substring(0,34)}</div>
-                    </div>
-                    <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:'#475569'}}>{d.total} {d.unit}</div>
-                  </div>
-                ))}
-              </Card>
-            </>
-          }
-        </div>
-      )}
-
-      {/* BOTTOM NAV */}
-      <div style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'1px solid #E2E8F0',display:'flex',justifyContent:'space-around',padding:'6px 0 8px',boxShadow:'0 -3px 14px rgba(0,0,0,.08)',zIndex:10}}>
-        {[{id:'cal',ico:'📅',l:'Calendario'},{id:'sum',ico:'📊',l:'Resumen'},{id:'pat',ico:'🔄',l:'Patrón'},{id:'chart',ico:null,l:'Gráfica'}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 8px',color:tab===t.id?'#1D4ED8':'#94A3B8',transition:'color .2s'}}>
-            {t.ico?<span style={{fontSize:21}}>{t.ico}</span>:<PieTabIcon active={tab===t.id}/>}
-            <span style={{fontSize:9,fontWeight:tab===t.id?800:500}}>{t.l}</span>
+  {/* ═══ RESUMEN ═══ */}
+  {tab==='sum'&&(
+    <div style={{padding:12}}>
+      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>📊 Resumen</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
+        {[
+          {k:'saldo',label:'DÍAS SALDO',val:totalDaysRem.toFixed(0),color:'#16A34A'},
+          {k:'horas',label:'HORAS SALDO',val:totalHoursRem.toFixed(0)+'h',color:'#1D4ED8'},
+          {k:'agotado',label:'AGOTADOS',val:cntAgotado,color:'#DC2626'},
+        ].map(s=>(
+          <button key={s.k} onClick={()=>setSumFilt(f=>f===s.k?'all':s.k)}
+            style={{background:sumFilt===s.k?s.color:'white',borderRadius:14,padding:'10px 4px',textAlign:'center',
+              boxShadow:'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.color}`:'2px solid transparent',cursor:'pointer',transition:'all .2s'}}>
+            <div style={{fontSize:18,fontWeight:800,color:sumFilt===s.k?'white':s.color}}>{s.val}</div>
+            <div style={{fontSize:7.5,color:sumFilt===s.k?'rgba(255,255,255,.8)':'#94A3B8',fontWeight:700,marginTop:2,letterSpacing:.3}}>{s.label}</div>
           </button>
         ))}
       </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        {sumFilt!=='all'&&<button onClick={()=>setSumFilt('all')} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:16,padding:'4px 14px',fontSize:11,color:'#64748B',cursor:'pointer'}}>Ver todos</button>}
+        <button onClick={()=>setAddCptModal(true)}
+          style={{background:'#1D4ED8',border:'none',borderRadius:14,width:40,height:40,color:'white',fontSize:22,cursor:'pointer',boxShadow:'0 2px 8px #1D4ED844',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:'auto'}}>+</button>
+      </div>
+      {visibleCpts.map(c=>{
+        const isCarryBoth=c.carryover==='both',isCO=c.carryover===true;
+        const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
+        return(
+          <div key={c.id} style={{marginBottom:8,background:isCarryBoth?'#FFF8F0':isCO?'#F0FDF4':'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.07)',borderLeft:`4px solid ${c.c}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:2,gap:4}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                  <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
+                  {c.ag&&<span style={{fontSize:7,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AUTO</span>}
+                  {isCarryBoth&&<span style={{fontSize:7,background:'#FFE0B2',color:'#E65100',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AÑO ANT.</span>}
+                  {isCO&&<span style={{fontSize:7,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 5px',fontWeight:700}}>TRASPASO</span>}
+                </div>
+                <div style={{fontSize:9,color:'#94A3B8',marginTop:2}}>{c.n}</div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                <button onClick={()=>{setAgModal(c.id);setAgTarget('t');setAgAmt(String(c.t));}}
+                  style={{fontSize:9,background:'#DCFCE7',color:'#15803D',border:'none',borderRadius:8,padding:'3px 7px',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>T:{c.t}{c.u}</button>
+                <button onClick={()=>{setAgModal(c.id);setAgTarget('us');setAgAmt(String(c.us));}}
+                  style={{fontSize:9,background:'#FDECEA',color:'#C62828',border:'none',borderRadius:8,padding:'3px 7px',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>U:{c.us}{c.u}</button>
+                <button onClick={()=>{if(window.confirm(`¿Eliminar "${c.a}"?\nSe borrarán los días asociados.`))removeConcept(c.id);}}
+                  style={{background:'#FEF2F2',border:'none',borderRadius:8,padding:'3px 7px',fontSize:12,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑</button>
+              </div>
+            </div>
+            {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+            {c.t===0&&<div style={{fontSize:10,color:'#CBD5E1',marginTop:3,fontStyle:'italic'}}>Sin total asignado</div>}
+          </div>
+        );
+      })}
+    </div>
+  )}
 
-      {/* DAY MODAL */}
-      {selDay&&selDateObj&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',zIndex:100,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-          onClick={e=>{if(e.target===e.currentTarget)setSelDay(null);}}>
-          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)'}}>
-            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 18px'}}/>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:800,color:'#1E3A8A'}}>{DNF[selDateObj.getDay()]} {selDateObj.getDate()}</div>
-                <div style={{fontSize:12,color:'#94A3B8',marginTop:1}}>{MN[selDateObj.getMonth()]} {selDateObj.getFullYear()}</div>
-              </div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                {ents[selDay]&&<button onClick={delEntry} style={{background:'#FEF2F2',border:'none',borderRadius:20,padding:'6px 13px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Borrar</button>}
-                <button onClick={()=>setSelDay(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
-              </div>
+  {/* ═══ PATRÓN ═══ */}
+  {tab==='pat'&&(
+    <div style={{padding:12}}>
+      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>🔄 Patrón de trabajo</div>
+      <Card>
+        <STitle icon="🔢">Secuencia de días</STitle>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:'#F8FAFC',borderRadius:12,marginBottom:12}}>
+          {pat.map((d,i)=>(
+            <span key={i} onClick={()=>setPat(p=>p.filter((_,idx)=>idx!==i))}
+              style={{background:d==='work'?TC:LC,color:'white',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              {d==='work'?'T':'L'} ✕
+            </span>
+          ))}
+          {!pat.length&&<span style={{fontSize:11,color:'#CBD5E1',alignSelf:'center',marginLeft:4}}>Sin patrón</span>}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <select value={newPat} onChange={e=>setNewPat(e.target.value)}
+            style={{flex:1,borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+            <option value="work">● TRABAJO</option><option value="rest">○ LIBRE</option>
+          </select>
+          <Btn small onClick={()=>setPat(p=>[...p,newPat])}>+ Añadir</Btn>
+        </div>
+      </Card>
+      {[
+        {key:'mw',bg:'#FFF5F5',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays},
+        {key:'mr',bg:'#F0FDF4',icon:'🟢',title:'Festivos de obligado descanso',color:FC_REST,days:mrDays,setDays:setMrDays},
+      ].map(({key,bg,icon,title,color,days,setDays})=>(
+        <Card key={key} bg={bg}>
+          <STitle icon={icon}>{title}</STitle>
+          <Btn full color={color} onClick={()=>{setMpModal(key);setMpSel(new Set(days));setMpNav(new Date(td));}}>
+            📅 Seleccionar fechas en calendario
+          </Btn>
+          {days.length>0&&<div style={{marginTop:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#64748B',marginBottom:5}}>{days.length} día(s) · toca para eliminar</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {[...days].sort().map(d=>(
+                <span key={d} onClick={()=>setDays(p=>p.filter(x=>x!==d))}
+                  style={{background:color,color:'white',borderRadius:12,padding:'3px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>{d.slice(5)} ✕</span>
+              ))}
             </div>
-            <div style={{marginBottom:16}}>
-              <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
-              <div style={{position:'relative'}}>
-                <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,hm:'full',hrs:8}))}
-                  style={{width:'100%',borderRadius:24,border:'1.5px solid #E2E8F0',padding:'11px 18px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-                  <option value="TRABA">● TRABA — Trabajo</option>
-                  <option value="LIBRE">○ LIBRE — Día libre</option>
-                  {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,32)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
-                </select>
-                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94A3B8',fontSize:11}}>▼</span>
-              </div>
-            </div>
-            {isHourCpt&&(
-              <div style={{marginBottom:16}}>
-                <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
-                <div style={{display:'flex',gap:6}}>
-                  {[['full','● Día completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
-                    <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
-                      style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':'#F1F5F9',color:form.hm===v?'white':'#64748B',fontSize:10,fontWeight:700,cursor:'pointer'}}>
-                      {l}
-                    </button>
-                  ))}
+          </div>}
+        </Card>
+      ))}
+      <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
+      <div style={{height:1,background:'#E2E8F0',margin:'16px 0'}}/>
+      <Card bg='#FFF7ED'>
+        <STitle icon="🗓">Reinicio de año</STitle>
+        <p style={{fontSize:11,color:'#92400E',marginBottom:10,lineHeight:1.5}}>Traspasos: <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b></p>
+        <Btn full color='#C2410C' onClick={()=>{if(window.confirm('¿Confirmar reinicio de año con traspasos?'))doYearReset();}}>🔁 Reinicio de año nuevo</Btn>
+      </Card>
+    </div>
+  )}
+
+  {/* ═══ GRÁFICA ═══ */}
+  {tab==='chart'&&(
+    <div style={{padding:12}}>
+      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>Distribución consumida · {td.getFullYear()}</div>
+      <div style={{fontSize:11,color:'#94A3B8',marginBottom:14}}>Muestra solo los días ya transcurridos y registrados, siempre al 100%.</div>
+      {consumedPie.length===0
+        ?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:'#CBD5E1',marginTop:10}}>Sin datos hasta hoy.</p></div>
+        :<>
+          <Card><PieSVG data={consumedPie}/></Card>
+          <Card>
+            {consumedPie.map((d,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<consumedPie.length-1?'1px solid #F1F5F9':'none'}}>
+                <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#1E293B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</div>
+                  <div style={{fontSize:9,color:'#94A3B8'}}>{d.full.substring(0,34)}</div>
                 </div>
-                {form.hm!=='full'&&(
-                  <div style={{marginTop:10}}>
-                    <label style={{fontSize:10,color:'#64748B',display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
-                    <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
-                      style={{width:'100%',borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit'}}/>
-                  </div>
-                )}
+                <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:'#475569'}}>{d.total} {d.unit}</div>
               </div>
-            )}
-            {form.type==='TRABA'&&(
-              <div style={{background:'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
-                <SecTitle icon="📋">Datos del servicio</SecTitle>
-                {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula o código'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción del puesto']].map(([k,l,ph])=>(
-                  <InputRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
-                ))}
-                <InputRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
-              </div>
-            )}
-            {(form.type==='TRABA'||form.type==='LIBRE')&&(
-              <div style={{background:'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
-                <SecTitle icon="⏰">Horas extraordinarias</SecTitle>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                  {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
-                    <div key={k}>
-                      <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
-                      <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
-                        onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
-                        style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:'white',fontFamily:'inherit'}}/>
-                    </div>
-                  ))}
-                  <div>
-                    <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
-                    <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
-                      style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-                      <option value="none">Sin dieta</option>
-                      <option value="media">Media (+0.5h)</option>
-                      <option value="completa">Completa (+1h)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-            <Btn full onClick={saveEntry}>💾 Guardar día</Btn>
+            ))}
+          </Card>
+        </>
+      }
+    </div>
+  )}
+
+  {/* BOTTOM NAV */}
+  <div style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'1px solid #E2E8F0',display:'flex',justifyContent:'space-around',padding:'6px 0 8px',boxShadow:'0 -3px 14px rgba(0,0,0,.08)',zIndex:10}}>
+    {[{id:'cal',ico:'📅',l:'Calendario'},{id:'sum',ico:'📊',l:'Resumen'},{id:'pat',ico:'🔄',l:'Patrón'},{id:'chart',ico:null,l:'Gráfica'}].map(t=>(
+      <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 8px',color:tab===t.id?'#1D4ED8':'#94A3B8'}}>
+        {t.ico?<span style={{fontSize:21}}>{t.ico}</span>:<PieTabIcon active={tab===t.id}/>}
+        <span style={{fontSize:9,fontWeight:tab===t.id?800:500}}>{t.l}</span>
+      </button>
+    ))}
+  </div>
+
+  {/* ═══ DAY MODAL ═══ */}
+  {selDay&&selDateObj&&(
+    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',zIndex:100,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+      onClick={e=>{if(e.target===e.currentTarget)setSelDay(null);}}>
+      <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)'}}>
+        <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 18px'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:800,color:'#1E3A8A'}}>{DNF[selDateObj.getDay()]} {selDateObj.getDate()}</div>
+            <div style={{fontSize:12,color:'#94A3B8',marginTop:1}}>{MN[selDateObj.getMonth()]} {selDateObj.getFullYear()}</div>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {ents[selDay]&&<button onClick={delEntry} style={{background:'#FEF2F2',border:'none',borderRadius:20,padding:'6px 13px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Borrar</button>}
+            <button onClick={()=>setSelDay(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
           </div>
         </div>
-      )}
-
-      {/* CONCEPTS PANEL */}
-      {showCP&&(
-        <div style={{position:'fixed',inset:0,background:'white',zIndex:200,overflowY:'auto'}}>
-          <div style={{background:'linear-gradient(135deg,#1C1C2E,#2D2D44)',color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div style={{fontSize:16,fontWeight:800}}>📋 Todos los conceptos</div>
-              <button onClick={()=>setShowCP(false)} style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:20,padding:'7px 14px',color:'white',fontSize:12,cursor:'pointer',fontWeight:700}}>✕ Cerrar</button>
+        {/* Tipo de día */}
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
+          <div style={{position:'relative'}}>
+            <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,hm:'full',hrs:8}))}
+              style={{width:'100%',borderRadius:24,border:'1.5px solid #E2E8F0',padding:'11px 18px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600,boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
+              <option value="TRABA">● TRABA — Trabajo</option>
+              <option value="LIBRE">○ LIBRE — Día libre</option>
+              {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,30)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
+            </select>
+            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94A3B8',fontSize:11}}>▼</span>
+          </div>
+        </div>
+        {/* Modo horas */}
+        {isHourCpt&&(
+          <div style={{marginBottom:16}}>
+            <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
+            <div style={{display:'flex',gap:6}}>
+              {[['full','● Completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
+                <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
+                  style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':'#F1F5F9',color:form.hm===v?'white':'#64748B',fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
+              ))}
+            </div>
+            {form.hm!=='full'&&<div style={{marginTop:10}}>
+              <label style={{fontSize:10,color:'#64748B',display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
+              <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
+                style={{width:'100%',borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>}
+          </div>
+        )}
+        {/* Datos servicio */}
+        {form.type==='TRABA'&&(
+          <div style={{background:'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
+            <STitle icon="📋">Datos del servicio</STitle>
+            {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
+              <IRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+            ))}
+            <IRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
+          </div>
+        )}
+        {/* Horas extra */}
+        {(form.type==='TRABA'||form.type==='LIBRE')&&(
+          <div style={{background:'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
+            <STitle icon="⏰">Horas extraordinarias</STitle>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
+                <div key={k}>
+                  <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
+                  <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
+                    onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
+                    style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:'white',fontFamily:'inherit'}}/>
+                </div>
+              ))}
+              <div>
+                <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
+                <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
+                  style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+                  <option value="none">Sin dieta</option><option value="media">Media (+0.5h)</option><option value="completa">Completa (+1h)</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div style={{padding:12}}>
-            {cpts.map(c=>{
-              const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
-              return(<div key={c.id} style={{marginBottom:8,background:'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <div style={{width:10,height:10,borderRadius:2,background:c.c}}/>
-                    <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
-                    {c.ag&&<span style={{fontSize:8,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AUTO</span>}
-                    {c.carryover&&<span style={{fontSize:8,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 6px',fontWeight:700}}>{c.carryover==='both'?'AÑO ANT.':'TRASPASO'}</span>}
-                  </div>
-                  <div style={{textAlign:'right',fontSize:11}}>
-                    <span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span>
-                    <span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span>
-                  </div>
-                </div>
-                <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:5}}>{c.n}</div>
-                {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+        )}
+        {/* Juicio */}
+        <div style={{background:'#F3E8FF',borderRadius:16,padding:14,marginBottom:14}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:form.juicio.active?12:0}}>
+            <STitle icon="⚖️">Juicio</STitle>
+            <button onClick={()=>setForm(f=>({...f,juicio:{...f.juicio,active:!f.juicio.active}}))}
+              style={{background:form.juicio.active?'#7C3AED':'#DDD6FE',border:'none',borderRadius:20,padding:'5px 14px',fontSize:11,color:form.juicio.active?'white':'#6D28D9',cursor:'pointer',fontWeight:700}}>
+              {form.juicio.active?'✓ Activo':'+ Añadir'}
+            </button>
+          </div>
+          {form.juicio.active&&(<>
+            <IRow label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
+            <IRow label="Fecha del juicio" type="date" value={form.juicio.fecha} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,fecha:v}}))}/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <IRow label="Hora inicio" type="time" value={form.juicio.horaInicio} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaInicio:v}}))}/>
+              <IRow label="Hora fin" type="time" value={form.juicio.horaFin} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaFin:v}}))}/>
+            </div>
+            <IRow label="Término municipal" value={form.juicio.termMunicipal}
+              onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,termMunicipal:v}}))}
+              opts={[{v:'dentro',l:'Dentro del término'},{v:'fuera',l:'Fuera del término'}]}/>
+          </>)}
+        </div>
+        <Btn full onClick={saveEntry}>💾 Guardar día</Btn>
+      </div>
+    </div>
+  )}
+
+  {/* ═══ CONCEPTS PANEL ═══ */}
+  {showCP&&(
+    <div style={{position:'fixed',inset:0,background:'white',zIndex:200,overflowY:'auto'}}>
+      <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{fontSize:16,fontWeight:800}}>📋 Todos los conceptos</div>
+          <button onClick={()=>setShowCP(false)} style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:20,padding:'7px 14px',color:'white',fontSize:12,cursor:'pointer',fontWeight:700}}>✕ Cerrar</button>
+        </div>
+      </div>
+      <div style={{padding:12}}>
+        {cpts.map(c=>{const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;return(
+          <div key={c.id} style={{marginBottom:8,background:'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                <div style={{width:10,height:10,borderRadius:2,background:c.c}}/>
+                <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
+                {c.ag&&<span style={{fontSize:7,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AUTO</span>}
+                {c.carryover&&<span style={{fontSize:7,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 5px',fontWeight:700}}>{c.carryover==='both'?'AÑO ANT.':'TRASPASO'}</span>}
+              </div>
+              <div style={{fontSize:11}}><span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span><span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span></div>
+            </div>
+            <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:5}}>{c.n}</div>
+            {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+          </div>
+        );})}
+      </div>
+    </div>
+  )}
+
+  {/* ═══ MULTI-DATE PICKER ═══ */}
+  {mpModal&&(()=>{
+    const isMw=mpModal==='mw',color=isMw?FC_WORK:FC_REST;
+    const y=mpNav.getFullYear(),m=mpNav.getMonth();
+    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+    const toggleDay=dk=>{setMpSel(prev=>{const s=new Set(prev);s.has(dk)?s.delete(dk):s.add(dk);return s;});};
+    const confirm=()=>{const arr=[...mpSel];if(isMw)setMwDays([...new Set(arr)]);else setMrDays([...new Set(arr)]);setMpModal(null);};
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+        <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px'}}>
+          <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 14px'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div><div style={{fontSize:15,fontWeight:800,color:'#1E293B'}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
+              <div style={{fontSize:11,color:'#94A3B8',marginTop:2}}>Toca para seleccionar/deseleccionar</div></div>
+            <button onClick={()=>setMpModal(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B'}}>✕</button>
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F8FAFC',borderRadius:20,padding:'6px 8px',marginBottom:12}}>
+            <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>‹</button>
+            <span style={{fontSize:13,fontWeight:700,color:'#1E293B'}}>{MN[m]} {y}</span>
+            <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>›</button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:4}}>
+            {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:14}}>
+            {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
+            {[...Array(ld.getDate())].map((_,i)=>{
+              const d=new Date(y,m,i+1),dk=toKey(d),sel=mpSel.has(dk),isT=dk===tk,dow=d.getDay(),isWE=dow===0||dow===6;
+              return(<div key={i} onClick={()=>toggleDay(dk)}
+                style={{aspectRatio:'1',background:sel?color:isT?'#DBEAFE':'#F8FAFC',borderRadius:10,
+                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',
+                  border:sel?`2px solid ${color}`:isT?'2px solid #1D4ED8':'1.5px solid #E5E7EB',
+                  boxShadow:sel?`0 2px 8px ${color}55`:'none',userSelect:'none'}}>
+                <span style={{fontSize:12,fontWeight:sel?800:500,color:sel?'white':isT?'#1D4ED8':isWE?'#DC2626':'#374151'}}>{i+1}</span>
+                {sel&&<div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,.7)',marginTop:1}}/>}
               </div>);
             })}
           </div>
+          <div style={{background:mpSel.size>0?`${color}18`:'#F8FAFC',borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div><div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:'#94A3B8'}}>{mpSel.size} día(s) seleccionado(s)</div>
+              {mpSel.size>0&&<div style={{fontSize:10,color:'#64748B',marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
+            </div>
+            {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:12,padding:'4px 10px',fontSize:10,color:'#64748B',cursor:'pointer',fontWeight:600}}>Limpiar</button>}
+          </div>
+          <Btn full color={color} disabled={mpSel.size===0} onClick={confirm}>✅ Añadir {mpSel.size} día(s)</Btn>
         </div>
-      )}
+      </div>
+    );
+  })()}
 
-      {/* MULTI-DATE PICKER */}
-      {mpModal&&(()=>{
-        const isMw=mpModal==='mw',color=isMw?FC_WORK:FC_REST;
-        const y=mpNav.getFullYear(),m=mpNav.getMonth();
-        const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-        const toggleDay=dk=>{setMpSel(prev=>{const s=new Set(prev);s.has(dk)?s.delete(dk):s.add(dk);return s;});};
-        const confirm=()=>{
-          const arr=[...mpSel];
-          if(isMw)setMwDays([...new Set(arr)]);else setMrDays([...new Set(arr)]);
-          setMpModal(null);
-        };
-        return(
-          <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-            <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px'}}>
-              <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 14px'}}/>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:15,fontWeight:800,color:'#1E293B'}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
-                  <div style={{fontSize:11,color:'#94A3B8',marginTop:2}}>Toca los días para marcar/desmarcar</div>
-                </div>
-                <button onClick={()=>setMpModal(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B'}}>✕</button>
-              </div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F8FAFC',borderRadius:20,padding:'6px 8px',marginBottom:12}}>
-                <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>‹</button>
-                <span style={{fontSize:13,fontWeight:700,color:'#1E293B'}}>{MN[m]} {y}</span>
-                <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>›</button>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:4}}>
-                {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:14}}>
-                {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
-                {[...Array(ld.getDate())].map((_,i)=>{
-                  const d=new Date(y,m,i+1),dk=toKey(d),sel=mpSel.has(dk),isT=dk===tk,dow=d.getDay(),isWE=dow===0||dow===6;
-                  return(<div key={i} onClick={()=>toggleDay(dk)}
-                    style={{aspectRatio:'1',background:sel?color:isT?'#DBEAFE':'#F8FAFC',borderRadius:10,
-                      display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',
-                      border:sel?`2px solid ${color}`:isT?'2px solid #1D4ED8':'1.5px solid #E5E7EB',
-                      boxShadow:sel?`0 2px 8px ${color}55`:'none',userSelect:'none'}}>
-                    <span style={{fontSize:12,fontWeight:sel?800:500,color:sel?'white':isT?'#1D4ED8':isWE?'#DC2626':'#374151'}}>{i+1}</span>
-                    {sel&&<div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,.7)',marginTop:1}}/>}
-                  </div>);
-                })}
-              </div>
-              <div style={{background:mpSel.size>0?`${color}18`:'#F8FAFC',borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:'#94A3B8'}}>{mpSel.size} día(s) seleccionado(s)</div>
-                  {mpSel.size>0&&<div style={{fontSize:10,color:'#64748B',marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
-                </div>
-                {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:12,padding:'4px 10px',fontSize:10,color:'#64748B',cursor:'pointer',fontWeight:600}}>Limpiar</button>}
-              </div>
-              <Btn full color={color} disabled={mpSel.size===0} onClick={confirm}>✅ Añadir {mpSel.size} día(s)</Btn>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* AG MODAL */}
-      {agModal&&(()=>{
-        const c=cpts.find(x=>x.id===agModal);if(!c)return null;
-        return(
-          <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-            <div style={{background:'white',borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.22)'}}>
-              <div style={{fontSize:15,fontWeight:800,color:'#1E3A8A',marginBottom:4}}>{c.a} · {agTarget==='us'?'Editar usados':'Editar total'}</div>
-              <div style={{fontSize:11,color:'#94A3B8',marginBottom:16}}>{c.n}</div>
-              <InputRow label={`Valor en ${c.u}`} type="number" ph="Ej: 43.3" value={agAmt} onChange={v=>setAgAmt(v)}/>
-              <div style={{display:'flex',gap:8,marginTop:14}}>
-                <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
-                <Btn full onClick={()=>{
-                  const v=parseFloat(agAmt);
-                  if(!isNaN(v)&&v>=0){
-                    if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));
-                    else               setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));
-                  }
-                  setAgModal(null);
-                }}>Guardar</Btn>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ADD CONCEPT MODAL */}
-      {addCptModal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.65)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px'}}>
-            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
-            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>➕ Nuevo concepto</div>
-            <InputRow label="Abreviatura (máx. 10)" ph="Ej: MICP" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
-            <InputRow label="Nombre completo" ph="Descripción del concepto" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
-              <div>
-                <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Total</label>
-                <input type="number" min="0" step="0.5" value={newCpt.t} onChange={e=>setNewCpt(p=>({...p,t:e.target.value}))}
-                  style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit'}}/>
-              </div>
-              <div>
-                <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Unidad</label>
-                <select value={newCpt.u} onChange={e=>setNewCpt(p=>({...p,u:e.target.value}))}
-                  style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-                  <option value="d">Días (d)</option>
-                  <option value="H">Horas (H)</option>
-                </select>
-              </div>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:5,textTransform:'uppercase',letterSpacing:.4}}>Color</label>
-              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
-                  <div key={col} onClick={()=>setNewCpt(p=>({...p,c:col}))}
-                    style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',
-                      border:newCpt.c===col?'3px solid #1E293B':'3px solid transparent',transition:'all .15s'}}/>
-                ))}
-                <input type="color" value={newCpt.c} onChange={e=>setNewCpt(p=>({...p,c:e.target.value}))}
-                  style={{width:28,height:28,borderRadius:8,border:'1.5px solid #E0E0E0',padding:2,cursor:'pointer'}}/>
-              </div>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <Btn full outline onClick={()=>setAddCptModal(false)}>Cancelar</Btn>
-              <Btn full disabled={!newCpt.a.trim()} onClick={addConcept}>✅ Añadir</Btn>
-            </div>
-          </div>
+  {/* ═══ AG MODAL ═══ */}
+  {agModal&&(()=>{const c=cpts.find(x=>x.id===agModal);if(!c)return null;return(
+    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{background:'white',borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.22)'}}>
+        <div style={{fontSize:15,fontWeight:800,color:'#1E3A8A',marginBottom:4}}>{c.a} · {agTarget==='us'?'Editar usados':'Editar total'}</div>
+        <div style={{fontSize:11,color:'#94A3B8',marginBottom:16}}>{c.n}</div>
+        <IRow label={`Valor en ${c.u}`} type="number" ph="Ej: 8" value={agAmt} onChange={v=>setAgAmt(v)}/>
+        <div style={{display:'flex',gap:8,marginTop:14}}>
+          <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
+          <Btn full onClick={()=>{const v=parseFloat(agAmt);if(!isNaN(v)&&v>=0){if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));else setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));}setAgModal(null);}}>Guardar</Btn>
         </div>
-      )}
-
-      {/* EXPORT MODAL */}
-      {exportModal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-          onClick={e=>{if(e.target===e.currentTarget)setExportModal(false);}}>
-          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px'}}>
-            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
-            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>⬇ Exportar datos</div>
-            {copyOk
-              ?<div style={{background:'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
-              :<div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>
-            }
-            <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
-              style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
-            <div style={{display:'flex',gap:8,marginTop:12}}>
-              <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
-              <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* IMPORT MODAL */}
-      {importModal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-          onClick={e=>{if(e.target===e.currentTarget)setImportModal(false);}}>
-          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px'}}>
-            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
-            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>⬆ Importar datos</div>
-            <div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega aquí el JSON exportado. Se sobreescribirán todos los datos.</div>
-            <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
-              style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
-            <div style={{display:'flex',gap:8,marginTop:12}}>
-              <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
-              <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
+  );})()} 
+
+  {/* ═══ ADD CONCEPT ═══ */}
+  {addCptModal&&(
+    <ModalShell title="➕ Nuevo concepto" onClose={()=>setAddCptModal(false)}>
+      <IRow label="Abreviatura (máx. 10)" ph="Ej: MICP" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
+      <IRow label="Nombre completo" ph="Descripción" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
+        <div>
+          <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
+          <input type="number" min="0" step="0.5" value={newCpt.t} onChange={e=>setNewCpt(p=>({...p,t:e.target.value}))}
+            style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit'}}/>
+        </div>
+        <div>
+          <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase'}}>Unidad</label>
+          <select value={newCpt.u} onChange={e=>setNewCpt(p=>({...p,u:e.target.value}))}
+            style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+            <option value="d">Días (d)</option><option value="H">Horas (H)</option>
+          </select>
+        </div>
+      </div>
+      <div style={{marginBottom:14}}>
+        <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:8,textTransform:'uppercase'}}>Color · Paleta completa</label>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
+          {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
+            <div key={col} onClick={()=>setNewCpt(p=>({...p,c:col}))}
+              style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',
+                border:newCpt.c===col?'3px solid #1E293B':'3px solid transparent',flexShrink:0}}/>
+          ))}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <label style={{fontSize:11,color:'#666',fontWeight:600}}>Elegir cualquier color:</label>
+          <input type="color" value={newCpt.c} onChange={e=>setNewCpt(p=>({...p,c:e.target.value}))}
+            style={{width:44,height:44,borderRadius:12,border:'2px solid #E0E0E0',padding:3,cursor:'pointer',flexShrink:0}}/>
+          <div style={{width:44,height:44,borderRadius:12,background:newCpt.c,border:'2px solid #E0E0E0'}}/>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <Btn full outline onClick={()=>setAddCptModal(false)}>Cancelar</Btn>
+        <Btn full disabled={!newCpt.a.trim()} onClick={addConcept}>✅ Añadir</Btn>
+      </div>
+    </ModalShell>
+  )}
+
+  {/* ═══ SETTINGS ═══ */}
+  {settingsModal&&(
+    <div style={{position:'fixed',inset:0,background:'white',zIndex:300,overflowY:'auto'}}>
+      <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{fontSize:16,fontWeight:800}}>⚙️ Ajustes</div>
+          <button onClick={()=>setSettingsModal(false)} style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:20,padding:'7px 14px',color:'white',fontSize:12,cursor:'pointer',fontWeight:700}}>✕ Cerrar</button>
+        </div>
+      </div>
+      <div style={{padding:12}}>
+        {/* Header color */}
+        <Card>
+          <STitle icon="🎨">Color del encabezado</STitle>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <input type="color" value={settings.headerColor||'#1C1C2E'} onChange={e=>setSettings(s=>({...s,headerColor:e.target.value}))}
+              style={{width:56,height:56,borderRadius:14,border:'2px solid #E0E0E0',padding:4,cursor:'pointer',flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{height:40,borderRadius:12,background:settings.headerColor||'#1C1C2E',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <span style={{color:'white',fontSize:11,fontWeight:700}}>Vista previa</span>
+              </div>
+              <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
+                {['#1C1C2E','#1C3A8A','#14532D','#7F1D1D','#1E3A5F','#3B0764','#1A1A1A','#0F172A'].map(col=>(
+                  <div key={col} onClick={()=>setSettings(s=>({...s,headerColor:col}))}
+                    style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',border:settings.headerColor===col?'3px solid #1D4ED8':'2px solid #E0E0E0'}}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+        {/* Logo */}
+        <Card>
+          <STitle icon="🖼️">Logo / Icono</STitle>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+            {LOGO_OPTS.map(o=>(
+              <div key={o.id} onClick={()=>setSettings(s=>({...s,logoType:o.id}))}
+                style={{border:settings.logoType===o.id?'3px solid #1D4ED8':'2px solid #E0E0E0',borderRadius:14,padding:'10px 4px',
+                  textAlign:'center',cursor:'pointer',background:settings.logoType===o.id?'#EFF6FF':'white',transition:'all .15s'}}>
+                <div style={{display:'flex',justifyContent:'center',marginBottom:4}}><RenderLogo type={o.id} size={32}/></div>
+                <div style={{fontSize:8,fontWeight:600,color:'#64748B'}}>{o.l.split(' ')[0]}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        {/* Profiles */}
+        <Card>
+          <STitle icon="👤">Perfiles (máx. 4)</STitle>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {Array.from({length:4},(_,i)=>{
+              const p=profiles[i];
+              return(
+                <div key={i}
+                  style={{border:activeProf===i&&p?'2px solid #1D4ED8':'2px solid #E0E0E0',borderRadius:14,padding:12,
+                    background:activeProf===i&&p?'#EFF6FF':'#FAFAFA',cursor:p?'pointer':'default',position:'relative'}}>
+                  {p?(
+                    <>
+                      <div onClick={()=>{setActiveProf(i);setSettingsModal(false);}}
+                        style={{fontSize:12,fontWeight:800,color:activeProf===i?'#1D4ED8':'#1E293B',marginBottom:2}}>{p.name}</div>
+                      <div style={{fontSize:9,color:'#94A3B8'}}>
+                        {Object.keys(p.ents).length} días · {p.cpts.length} conceptos
+                      </div>
+                      {activeProf===i&&<div style={{fontSize:8,color:'#1D4ED8',fontWeight:700,marginTop:2}}>● ACTIVO</div>}
+                      <div style={{display:'flex',gap:4,marginTop:6}}>
+                        <button onClick={()=>{const name=window.prompt('Nombre del perfil:',p.name);if(name)setProfiles(ps=>ps.map((pp,ii)=>ii===i?{...pp,name}:pp));}}
+                          style={{fontSize:9,background:'#DBEAFE',color:'#1D4ED8',border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>✏️</button>
+                        {profiles.length>1&&activeProf!==i&&(
+                          <button onClick={()=>{if(window.confirm(`¿Eliminar perfil "${p.name}"?`)){setProfiles(ps=>ps.filter((_,ii)=>ii!==i));setActiveProf(0);}}}
+                            style={{fontSize:9,background:'#FEF2F2',color:'#B91C1C',border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>🗑</button>
+                        )}
+                      </div>
+                    </>
+                  ):(
+                    <button onClick={()=>{const name=window.prompt('Nombre del nuevo perfil:',`Perfil ${i+1}`);if(name){setProfiles(ps=>{const n=[...ps];n[i]=INIT_PROF(name);return n;});}}}
+                      style={{width:'100%',height:72,background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,color:'#94A3B8'}}>
+                      <span style={{fontSize:24}}>+</span>
+                      <span style={{fontSize:10,fontWeight:600}}>Nuevo perfil</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+        {/* Widgets */}
+        <Card>
+          <STitle icon="📦">Widgets del calendario</STitle>
+          {settings.widgets.map((w,i)=>(
+            <div key={w.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<settings.widgets.length-1?'1px solid #F1F5F9':'none'}}>
+              <button onClick={()=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,show:!ww.show}:ww)}))}
+                style={{background:w.show?'#1D4ED8':'#E2E8F0',border:'none',borderRadius:20,width:36,height:20,cursor:'pointer',transition:'all .2s',position:'relative',flexShrink:0}}>
+                <div style={{position:'absolute',top:2,left:w.show?18:2,width:16,height:16,borderRadius:'50%',background:'white',transition:'left .2s'}}/>
+              </button>
+              <input value={w.name} onChange={e=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,name:e.target.value}:ww)}))}
+                style={{flex:1,border:'1px solid #E2E8F0',borderRadius:12,padding:'6px 10px',fontSize:12,fontFamily:'inherit'}}/>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  )}
+
+  {/* ═══ WIDGET MODALS ═══ */}
+  {widgetModal==='overtime'&&(
+    <ModalShell title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'Horas extra'}`} onClose={()=>setWidgetModal(null)}>
+      <div style={{marginBottom:12,background:'#FFFBEB',borderRadius:14,padding:12,textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:800,color:'#F59E0B'}}>{overtimeTotal.toFixed(1)}h</div>
+        <div style={{fontSize:11,color:'#92400E'}}>Total horas extra en {td.getFullYear()}</div>
+      </div>
+      {overtimeRows.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>Sin horas extra registradas.</p>
+        :overtimeRows.map((r,i)=>(
+          <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F1F5F9',fontSize:12}}>
+            <div>
+              <span style={{fontWeight:700,color:'#1E293B'}}>{r.dk}</span>
+              <span style={{color:'#94A3B8',marginLeft:8}}>
+                {r.d>0&&`☀️${r.d}h `}{r.n>0&&`🌙${r.n}h `}{r.fd>0&&`🎉${r.fd}h `}{r.dieta!=='none'&&`🍽`}
+              </span>
+            </div>
+            <span style={{fontWeight:800,color:'#F59E0B'}}>{r.total.toFixed(1)}h</span>
+          </div>
+        ))
+      }
+    </ModalShell>
+  )}
+  {widgetModal==='trials_done'&&(
+    <ModalShell title={`⚖️ ${settings.widgets.find(w=>w.id==='trials_done')?.name||'Juicios realizados'}`} onClose={()=>setWidgetModal(null)}>
+      <div style={{marginBottom:12,background:'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
+        <div style={{fontSize:11,color:'#6D28D9'}}>Juicios realizados en {td.getFullYear()}</div>
+      </div>
+      {trialsDone.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>Sin juicios registrados.</p>
+        :trialsDone.map((t,i)=>(
+          <div key={i} style={{padding:'10px 0',borderBottom:'1px solid #F1F5F9'}}>
+            <div style={{fontWeight:800,color:'#1E293B',fontSize:13}}>{t.dk}</div>
+            <div style={{fontSize:11,color:'#64748B',marginTop:3}}>
+              {t.juzgado&&<span>⚖️ {t.juzgado} · </span>}{t.horaInicio&&<span>🕐 {t.horaInicio}{t.horaFin&&`–${t.horaFin}`} · </span>}
+              {t.termMunicipal&&<span>{t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'} del término</span>}
+            </div>
+          </div>
+        ))
+      }
+    </ModalShell>
+  )}
+  {widgetModal==='trials_future'&&(
+    <ModalShell title={`📅 ${settings.widgets.find(w=>w.id==='trials_future')?.name||'Juicios futuros'}`} onClose={()=>setWidgetModal(null)}>
+      <div style={{marginBottom:12,background:'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
+        <div style={{fontSize:11,color:'#6D28D9'}}>Próximos juicios</div>
+      </div>
+      {trialsFuture.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>No hay juicios futuros registrados.</p>
+        :trialsFuture.map((t,i)=>(
+          <div key={i} style={{padding:'10px 12px',borderRadius:12,marginBottom:8,background:i===0?'#F3E8FF':'#FAFAFA',border:i===0?'2px solid #8B5CF6':'1px solid #E5E7EB'}}>
+            <div style={{fontWeight:800,color:i===0?'#6D28D9':'#1E293B',fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+              {i===0&&<span style={{fontSize:10,background:'#8B5CF6',color:'white',borderRadius:8,padding:'1px 6px',fontWeight:700}}>PRÓXIMO</span>}
+              {t.dk}
+            </div>
+            <div style={{fontSize:11,color:'#64748B',marginTop:4}}>
+              {t.juzgado&&<div>⚖️ {t.juzgado}</div>}
+              {t.horaInicio&&<div>🕐 {t.horaInicio}{t.horaFin&&` – ${t.horaFin}`}</div>}
+              {t.termMunicipal&&<div>{t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'} del término municipal</div>}
+            </div>
+          </div>
+        ))
+      }
+    </ModalShell>
+  )}
+
+  {/* ═══ EXPORT / IMPORT ═══ */}
+  {exportModal&&(
+    <ModalShell title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
+      {copyOk?<div style={{background:'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
+        :<div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>}
+      <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
+        style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
+      <div style={{display:'flex',gap:8,marginTop:12}}>
+        <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
+        <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
+      </div>
+    </ModalShell>
+  )}
+  {importModal&&(
+    <ModalShell title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
+      <div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega el JSON exportado. Se sobreescribirán todos los datos.</div>
+      <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
+        style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
+      <div style={{display:'flex',gap:8,marginTop:12}}>
+        <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
+        <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
+      </div>
+    </ModalShell>
+  )}
+
+  </div>
   );
 }
 
@@ -987,9 +1166,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 <script>
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>{
-      navigator.serviceWorker.register('./sw.js')
-        .then(r=>console.log('SW OK',r.scope))
-        .catch(e=>console.log('SW error',e));
+      navigator.serviceWorker.register('./sw.js').catch(e=>console.log('SW',e));
     });
   }
 </script>
