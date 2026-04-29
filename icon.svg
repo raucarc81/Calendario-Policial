@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo -->
+  <rect width="512" height="512" rx="90" fill="#1C1C2E"/>
+  <!-- Escudo -->
+  <path d="M256 60 L400 130 L400 280 C400 370 330 430 256 460 C182 430 112 370 112 280 L112 130 Z" fill="#1D4ED8"/>
+  <path d="M256 90 L375 150 L375 275 C375 350 315 405 256 432 C197 405 137 350 137 275 L137 150 Z" fill="#2563EB"/>
+  <!-- Estrella -->
+  <polygon points="256,160 270,205 318,205 280,232 294,278 256,252 218,278 232,232 194,205 242,205"
+    fill="#F1F5F9"/>
+  <!-- Texto PM -->
+  <text x="256" y="370" text-anchor="middle" font-family="system-ui,sans-serif"
+    font-size="72" font-weight="900" fill="white" letter-spacing="4">PM</text>
+</svg>
