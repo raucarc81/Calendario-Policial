@@ -1,4 +1,4 @@
-const CACHE = 'cal-policial-v2';
+const CACHE = 'cal-policial-v4';
 const ASSETS = [
   './',
   './index.html',
