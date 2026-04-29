@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>👮 Calendario Policial</title>
+  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#F1F5F9;font-family:system-ui,sans-serif;overscroll-behavior:none;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:4px;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useRef, useCallback, useEffect } = React;
+const { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } = Recharts;
+
+const toKey = d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fromKey = dk=>{const [y,m,d]=dk.split('-').map(Number);return new Date(y,m-1,d);};
+const addD = (d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+const monStart = d=>{const r=new Date(d);const day=r.getDay();r.setDate(r.getDate()-(day===0?6:day-1));return r;};
+const DN  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const DNF = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MN  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MNS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+const TC='#90A4AE', LC='#43A047', FC_WORK='#EF5350', FC_REST='#66BB6A';
+
+const INIT_CPTS = [
+  {id:'HLANT',   a:'HLANT',      n:'HORAS LIBRES AÑOS ANTERIORES',         t:0,   u:'H', c:'#FF6B6B', us:0, carryover:'both'},
+  {id:'HLIBS',   a:'HLIBS',      n:'HORAS LIBRES',                          t:1.4, u:'H', c:'#00BCD4', us:0, ag:true},
+  {id:'AMSBA',   a:'AMSBA',      n:'AUSENCIA MEDICA SIN BAJA',              t:4,   u:'d', c:'#2196F3', us:0},
+  {id:'CFEST',   a:'CFEST',      n:'COMPENSACION FESTIVOS',                 t:2,   u:'d', c:'#4CAF50', us:0, ag:true},
+  {id:'ASPAR',   a:'ASPAR',      n:'ASUNTOS PARTICULARES',                  t:6,   u:'d', c:'#F9A825', us:0},
+  {id:'ASPAA',   a:'ASPAA',      n:'ASUNTOS PARTICULARES AÑO ANTERIOR',     t:0,   u:'d', c:'#9C27B0', us:0, carryover:true},
+  {id:'LLACT',   a:'LLACT',      n:'LIC. LACTANCIA ACUMULADA',              t:30,  u:'d', c:'#009688', us:0},
+  {id:'CFANT',   a:'CFANT',      n:'COMP. FESTIVOS AÑO ANTERIOR',           t:0,   u:'d', c:'#81C784', us:0, carryover:true},
+  {id:'ENFAM',   a:'ENFAM',      n:'ENF/HOSP/REPO FAMILIAR',                t:0,   u:'d', c:'#E91E63', us:0},
+  {id:'ASMAF',   a:'ASMAF',      n:'ASISTENCIA MATRIMONIO FAMILIAR',        t:20,  u:'d', c:'#3F51B5', us:0},
+  {id:'FALFA',   a:'FALFA',      n:'FALLECIMIENTO FAMILIAR',                t:0,   u:'d', c:'#78909C', us:0},
+  {id:'PPATE',   a:'PPATE',      n:'PERMISO PATERNIDAD',                    t:140, u:'d', c:'#FF5722', us:0},
+  {id:'EXAME',   a:'EXAME',      n:'EXAMENES',                              t:0,   u:'d', c:'#A1887F', us:0},
+  {id:'ART154',  a:'ART15.4',    n:'DIAS ART. 15.4H (Traslado/Matrimonio)', t:0,   u:'d', c:'#8BC34A', us:0},
+  {id:'CURS7',   a:'CURS7',      n:'CURSOS ARTÍCULO 70',                    t:72,  u:'H', c:'#C0CA33', us:0},
+  {id:'PSUEL',   a:'PSUEL',      n:'PERMISO SIN SUELDO',                    t:0,   u:'d', c:'#FF7043', us:0},
+  {id:'SUSPF',   a:'SUSPF',      n:'SUSPENSION DE FUNCIONES',               t:0,   u:'d', c:'#7986CB', us:0},
+  {id:'DPUBL',   a:'DPUBL',      n:'DEBERES PÚBLICOS ART 15.4 J,K,N',       t:0,   u:'d', c:'#26A69A', us:0},
+  {id:'VACAN',   a:'VACAN',      n:'DÍAS ADICIONALES POR ANTIGÜEDAD',       t:1,   u:'d', c:'#EF5350', us:0},
+  {id:'VACAC',   a:'VACAC',      n:'VACACIONES',                            t:22,  u:'d', c:'#00ACC1', us:0},
+  {id:'HFCNO',   a:'HFCNO',      n:'HORAS FACTOR CORRECTOR NOCTURNO',       t:56,  u:'H', c:'#8E24AA', us:0},
+  {id:'HLART15', a:'HLART.15',   n:'HORAS ART. 15 4º L (POLICIAL)',         t:16,  u:'H', c:'#1976D2', us:0},
+  {id:'HFCNOAÑ', a:'HFCNOAÑ',   n:'H.F.C. NOCTURNO AÑO ANTERIOR',          t:0,   u:'H', c:'#00897B', us:0, carryover:true},
+  {id:'FEST2431',a:'FEST.24-31', n:'COMP. FESTIVOS 24 Y 31 DIC.',           t:0,   u:'d', c:'#2E7D32', us:0},
+  {id:'AJUSJOR', a:'AJUSJOR',    n:'COMP. EXCESO/AJUSTE JORNADA',           t:16,  u:'d', c:'#546E7A', us:0},
+  {id:'SANIV',   a:'SANIV',      n:'COMP. JORNADA SAN ISIDRO Y VER.',       t:4,   u:'d', c:'#558B2F', us:0},
+  {id:'CFORM',   a:'CFORM',      n:'COMP. FORMACIÓN FUERA JORNADA',         t:8,   u:'d', c:'#F57C00', us:0},
+  {id:'PPARE',   a:'PPARE',      n:'PERMISO PARENTAL ART. 128.2 RD 5/23',   t:56,  u:'d', c:'#6A1B9A', us:0},
+];
+
+/* ── UI helpers ── */
+const ProgBar = ({pct,color,h=5})=>(
+  <div style={{background:'#E8EAED',borderRadius:4,height:h,overflow:'hidden'}}>
+    <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:color,borderRadius:4,transition:'width .35s'}}/>
+  </div>
+);
+const Btn = ({children,onClick,color='#1D4ED8',disabled,full,small,outline,style={}})=>(
+  <button onClick={onClick} disabled={disabled} style={{
+    background:disabled?'#BDBDBD':outline?'transparent':color,
+    color:outline?color:'white',border:outline?`2px solid ${color}`:'none',
+    borderRadius:24,padding:small?'7px 14px':'11px 22px',
+    fontSize:small?11:13,fontWeight:700,cursor:disabled?'not-allowed':'pointer',
+    width:full?'100%':'auto',boxShadow:disabled?'none':`0 2px 8px ${color}44`,
+    transition:'transform .1s',...style}}
+    onMouseDown={e=>{if(!disabled)e.currentTarget.style.transform='scale(.97)';}}
+    onMouseUp={e=>{e.currentTarget.style.transform='scale(1)';}}
+  >{children}</button>
+);
+const Card = ({children,bg='white',style={}})=>(
+  <div style={{background:bg,borderRadius:16,padding:14,boxShadow:'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
+);
+const SecTitle = ({icon,children})=>(
+  <div style={{fontSize:13,fontWeight:800,color:'#333',marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+    {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
+  </div>
+);
+const InputRow = ({label,value,onChange,type='text',ph='',multiline})=>(
+  <div style={{marginBottom:9}}>
+    <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
+    {multiline
+      ?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
+          style={{width:'100%',borderRadius:12,border:'1.5px solid #E0E0E0',padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:'white'}}/>
+      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
+          style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:'white'}}/>
+    }
+  </div>
+);
+const PieTabIcon = ({active,size=22})=>(
+  <div style={{width:size,height:size,borderRadius:'50%',flexShrink:0,
+    background:active
+      ?'conic-gradient(#00ACC1 0% 28%,#F9A825 28% 54%,#4CAF50 54% 76%,#8E24AA 76% 100%)'
+      :'conic-gradient(#B0BEC5 0% 28%,#CFD8DC 28% 54%,#B0BEC5 54% 76%,#CFD8DC 76% 100%)',
+  }}/>
+);
+
+/* ══════════════════ APP ══════════════════ */
+function App(){
+  const td=useMemo(()=>{const d=new Date();d.setHours(0,0,0,0);return d;},[]);
+  const tk=toKey(td);
+
+  const [loaded,       setLoaded]       = useState(false);
+  const [tab,          setTab]          = useState('cal');
+  const [cv,           setCv]           = useState('week');
+  const [nav,          setNav]          = useState(new Date(td));
+  const [cpts,         setCpts]         = useState(INIT_CPTS);
+  const [ents,         setEnts]         = useState({});
+  const [selDay,       setSelDay]       = useState(null);
+  const [showCP,       setShowCP]       = useState(false);
+  const [sumFilt,      setSumFilt]      = useState('all');
+  const [pat,          setPat]          = useState([]);
+  const [mwDays,       setMwDays]       = useState([]);
+  const [mrDays,       setMrDays]       = useState([]);
+  const [newPat,       setNewPat]       = useState('work');
+  const [mpModal,      setMpModal]      = useState(null);
+  const [mpSel,        setMpSel]        = useState(new Set());
+  const [mpNav,        setMpNav]        = useState(new Date(td));
+  const [agModal,      setAgModal]      = useState(null);
+  const [agAmt,        setAgAmt]        = useState('');
+  const [agTarget,     setAgTarget]     = useState('t');
+  const [addCptModal,  setAddCptModal]  = useState(false);
+  const [newCpt,       setNewCpt]       = useState({a:'',n:'',t:0,u:'d',c:'#607D8B'});
+  const [exportModal,  setExportModal]  = useState(false);
+  const [exportJson,   setExportJson]   = useState('');
+  const [importModal,  setImportModal]  = useState(false);
+  const [importText,   setImportText]   = useState('');
+  const [copyOk,       setCopyOk]       = useState(false);
+  const [saveInd,      setSaveInd]      = useState('');
+
+  const EF = {type:'TRABA',hm:'full',hrs:8,wd:{ind:'',veh:'',os:'',pe:'',notas:''},eh:{d:'',n:'',fd:'',dieta:'none'}};
+  const [form,setForm] = useState(EF);
+
+  /* ── localStorage load ── */
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem('cal_policial');
+      if(raw){
+        const d=JSON.parse(raw);
+        if(d.cpts)   setCpts(d.cpts);
+        if(d.ents)   setEnts(d.ents);
+        if(d.mrDays) setMrDays(d.mrDays);
+        if(d.mwDays) setMwDays(d.mwDays);
+        if(d.pat)    setPat(d.pat);
+      }
+    }catch(e){console.log('Sin datos previos');}
+    setLoaded(true);
+  },[]);
+
+  /* ── localStorage save ── */
+  useEffect(()=>{
+    if(!loaded) return;
+    try{
+      localStorage.setItem('cal_policial',JSON.stringify({cpts,ents,mrDays,mwDays,pat}));
+      setSaveInd('✓');
+      setTimeout(()=>setSaveInd(''),1800);
+    }catch(e){console.log('Error al guardar',e);}
+  },[cpts,ents,mrDays,mwDays,pat,loaded]);
+
+  /* ── Export / Import ── */
+  const exportBackup=()=>{
+    const data=JSON.stringify({cpts,ents,mrDays,mwDays,pat,ts:Date.now()},null,2);
+    setExportJson(data); setExportModal(true); setCopyOk(false);
+    try{navigator.clipboard.writeText(data).then(()=>setCopyOk(true)).catch(()=>{});}catch(e){}
+  };
+  const doImport=()=>{
+    try{
+      const d=JSON.parse(importText);
+      if(d.cpts)   setCpts(d.cpts);
+      if(d.ents)   setEnts(d.ents);
+      if(d.mrDays) setMrDays(d.mrDays);
+      if(d.mwDays) setMwDays(d.mwDays);
+      if(d.pat)    setPat(d.pat);
+      setImportModal(false); setImportText('');
+      alert('✅ Importado correctamente.');
+    }catch{alert('❌ JSON no válido.');}
+  };
+
+  /* ── Concept add/remove ── */
+  const addConcept=()=>{
+    if(!newCpt.a.trim()) return;
+    const id='USR_'+Date.now();
+    setCpts(p=>[...p,{id,...newCpt,t:parseFloat(newCpt.t)||0,us:0}]);
+    setNewCpt({a:'',n:'',t:0,u:'d',c:'#607D8B'}); setAddCptModal(false);
+  };
+  const removeConcept=id=>{
+    setCpts(p=>p.filter(c=>c.id!==id));
+    setEnts(p=>{const n={...p};Object.keys(n).forEach(k=>{if(n[k].type===id)delete n[k];});return n;});
+  };
+
+  /* ── Swipe ── */
+  const touchX=useRef(null);
+  const handleTouchStart=e=>{touchX.current=e.touches[0].clientX;};
+  const handleTouchEnd=e=>{
+    if(touchX.current===null)return;
+    const diff=e.changedTouches[0].clientX-touchX.current;
+    touchX.current=null;
+    if(Math.abs(diff)<50)return;
+    goNav(diff<0?1:-1);
+  };
+
+  const goNav=useCallback(dir=>{
+    setNav(prev=>{
+      const d=new Date(prev);
+      if(cv==='day')       d.setDate(d.getDate()+dir);
+      else if(cv==='week') d.setDate(d.getDate()+7*dir);
+      else if(cv==='month')d.setMonth(d.getMonth()+dir);
+      else                 d.setFullYear(d.getFullYear()+dir);
+      return d;
+    });
+  },[cv]);
+
+  const navTitle=useMemo(()=>{
+    if(cv==='day')  return `${nav.getDate()} ${MN[nav.getMonth()]} ${nav.getFullYear()}`;
+    if(cv==='week'){const ws=monStart(nav),we=addD(ws,6);return `${ws.getDate()} ${MNS[ws.getMonth()]} – ${we.getDate()} ${MNS[we.getMonth()]} ${we.getFullYear()}`;}
+    if(cv==='month')return `${MN[nav.getMonth()]} ${nav.getFullYear()}`;
+    return `Año ${nav.getFullYear()}`;
+  },[cv,nav]);
+
+  const doYearReset=()=>{
+    setCpts(prev=>{
+      const g=id=>prev.find(c=>c.id===id);
+      return prev.map(c=>{
+        if(c.id==='HLANT')   return {...c,t:+(c.t+Math.max(0,(g('HLIBS')?.t||0)-(g('HLIBS')?.us||0))).toFixed(1)};
+        if(c.id==='ASPAA')   return {...c,t:Math.max(0,(g('ASPAR')?.t||0)-(g('ASPAR')?.us||0)),us:0};
+        if(c.id==='CFANT')   return {...c,t:Math.max(0,(g('FEST2431')?.t||0)-(g('FEST2431')?.us||0))+Math.max(0,(g('CFEST')?.t||0)-(g('CFEST')?.us||0)),us:0};
+        if(c.id==='HFCNOAÑ')return {...c,t:Math.max(0,(g('HFCNO')?.t||0)-(g('HFCNO')?.us||0)),us:0};
+        return {...c,us:0};
+      });
+    });
+    setEnts({});
+  };
+
+  const getDI=useCallback(dk=>{
+    if(mrDays.includes(dk))return{c:FC_REST,l:'FEST.D',t:'mr',pct:100};
+    if(mwDays.includes(dk))return{c:FC_WORK,l:'F.OBL',t:'MWDAY',pct:100};
+    const e=ents[dk];
+    if(!e)return null;
+    if(e.type==='TRABA')    return{c:TC,l:'TRABA',t:'TRABA',pct:100};
+    if(e.type==='LIBRE')    return{c:LC,l:'LIBRE',t:'LIBRE',pct:100};
+    if(e.type==='FEST_REST')return{c:FC_REST,l:'FEST.D',t:'fr',pct:100};
+    const cp=cpts.find(c=>c.id===e.type);if(!cp)return null;
+    const suf=e.hm==='salida'?'↑':e.hm==='entrada'?'↓':'';
+    const pct=e.hm==='full'?100:Math.round(((parseFloat(e.hrs)||0)/8)*100);
+    return{c:cp.c,l:cp.a+suf,t:e.type,pct};
+  },[ents,mrDays,mwDays,cpts]);
+
+  const openDay=dk=>{
+    const e=ents[dk];
+    setForm(e?{type:e.type,hm:e.hm||'full',hrs:e.hrs||8,wd:e.wd||EF.wd,eh:e.eh||EF.eh}:{...EF});
+    setSelDay(dk);
+  };
+  const saveEntry=()=>{
+    if(!selDay)return;
+    const old=ents[selDay],oType=old?.type,nType=form.type;
+    if(oType&&!['TRABA','LIBRE','FEST_REST'].includes(oType)){
+      const oc=cpts.find(c=>c.id===oType);
+      if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===oType?{...c,us:Math.max(0,c.us-r)}:c));}
+    }
+    if(nType&&!['TRABA','LIBRE','FEST_REST'].includes(nType)){
+      const nc=cpts.find(c=>c.id===nType);
+      if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
+    }
+    setEnts(p=>({...p,[selDay]:{type:form.type,hm:form.hm,hrs:form.hrs,wd:{...form.wd},eh:{...form.eh}}}));
+    setSelDay(null);
+  };
+  const delEntry=()=>{
+    if(!selDay)return;
+    const old=ents[selDay];
+    if(old&&!['TRABA','LIBRE','FEST_REST'].includes(old.type)){
+      const oc=cpts.find(c=>c.id===old.type);
+      if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===old.type?{...c,us:Math.max(0,c.us-r)}:c));}
+    }
+    setEnts(p=>{const n={...p};delete n[selDay];return n;});
+    setSelDay(null);
+  };
+  const applyPat=()=>{
+    if(!pat.length)return;
+    const year=td.getFullYear(),ne={...ents};
+    let pi=0,cur=new Date(year,0,1),end=new Date(year,11,31);
+    while(cur<=end){
+      const dk=toKey(cur);
+      if(!mrDays.includes(dk)&&!mwDays.includes(dk)){
+        const pt=pat[pi%pat.length];
+        ne[dk]={type:pt==='work'?'TRABA':'LIBRE',hm:'full',hrs:pt==='work'?8:0,wd:EF.wd,eh:EF.eh};
+      }
+      pi++;cur=addD(cur,1);
+    }
+    setEnts(ne);setTab('cal');
+  };
+
+  const workedCount=useMemo(()=>
+    Object.entries(ents).filter(([dk,e])=>(e.type==='TRABA'||mwDays.includes(dk))&&fromKey(dk)<=td).length
+  ,[ents,mwDays,td]);
+
+  const pieData=useMemo(()=>{
+    const base=cpts.filter(c=>c.t>0).map(c=>({name:c.a,value:+(c.t/(c.u==='H'?8:1)).toFixed(2),color:c.c,full:c.n,total:c.t,unit:c.u}));
+    if(workedCount>0)base.unshift({name:'TRABA',value:workedCount,color:TC,full:'Días trabajados',total:workedCount,unit:'d'});
+    return base;
+  },[cpts,workedCount]);
+
+  const cntSaldo=useMemo(()=>cpts.filter(c=>c.t>0&&c.us<c.t).length,[cpts]);
+  const cntAgotado=useMemo(()=>cpts.filter(c=>c.t>0&&c.us>=c.t).length,[cpts]);
+  const visibleCpts=useMemo(()=>{
+    if(sumFilt==='saldo')   return cpts.filter(c=>c.t>0&&c.us<c.t);
+    if(sumFilt==='agotado') return cpts.filter(c=>c.t>0&&c.us>=c.t);
+    return cpts;
+  },[cpts,sumFilt]);
+
+  const selCpt   =!['TRABA','LIBRE','FEST_REST'].includes(form.type)?cpts.find(c=>c.id===form.type):null;
+  const isHourCpt=selCpt?.u==='H';
+  const selDateObj=selDay?fromKey(selDay):null;
+  const openAgModal=(id,target='t')=>{setAgModal(id);setAgAmt('');setAgTarget(target);};
+
+  /* ── Day Cell ── */
+  const DayCell=({dk,weekMode})=>{
+    const dateObj=fromKey(dk),num=dateObj.getDate();
+    const isT=dk===tk,di=getDI(dk),dow=dateObj.getDay(),isWE=dow===0||dow===6;
+    const hasExt=ents[dk]?.eh&&(ents[dk].eh.d||ents[dk].eh.n||ents[dk].eh.fd);
+    const pct=di?.pct??0,partial=di&&pct<100,full=di&&pct>=100;
+    const cellBg=full?di.c:isT?'#DBEAFE':'#FAFAFA';
+    const numCol=full?'rgba(255,255,255,.93)':partial?'#1E293B':isT?'#1D4ED8':isWE?'#DC2626':'#374151';
+    return(
+      <div onClick={()=>openDay(dk)}
+        style={{background:cellBg,border:isT?'2px solid #1D4ED8':'1px solid #E5E7EB',borderRadius:10,
+          cursor:'pointer',minHeight:weekMode?92:50,padding:'5px 3px',
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',
+          boxShadow:di?'0 2px 8px rgba(0,0,0,.18)':'0 1px 2px rgba(0,0,0,.05)',
+          overflow:'hidden',userSelect:'none',transition:'transform .12s',position:'relative'}}
+        onMouseEnter={e=>e.currentTarget.style.transform='scale(1.05)'}
+        onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
+      >
+        {partial&&<div style={{position:'absolute',bottom:0,left:0,right:0,height:`${pct}%`,background:di.c,opacity:.82,borderRadius:'0 0 8px 8px'}}/>}
+        <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,color:numCol,lineHeight:1.2,position:'relative',zIndex:1}}>{num}</span>
+        {di&&<span style={{fontSize:7,fontWeight:700,color:full||pct>55?'rgba(255,255,255,.93)':'#1E293B',
+          background:full?'rgba(0,0,0,.2)':`${di.c}bb`,borderRadius:6,padding:'1px 4px',marginTop:2,
+          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',position:'relative',zIndex:1}}>
+          {di.l}</span>}
+        {hasExt&&<div style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#FDE047',zIndex:2}}/>}
+      </div>
+    );
+  };
+
+  /* ── Views ── */
+  const WeekView=()=>{
+    const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));
+    return(<div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
+        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':'#6B7280',padding:'3px 0'}}>{d}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+        {days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}
+      </div>
+    </div>);
+  };
+  const MonthView=()=>{
+    const y=nav.getFullYear(),m=nav.getMonth();
+    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+    const cells=[];
+    for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);
+    for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
+    return(<div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div>
+    </div>);
+  };
+  const DayViewFull=()=>{
+    const dk=toKey(nav),di=getDI(dk),e=ents[dk];
+    return(<div>
+      <div style={{background:di?`linear-gradient(140deg,${di.c}ee,${di.c}99)`:'linear-gradient(140deg,#E2E8F0,#CBD5E1)',borderRadius:20,padding:20,marginBottom:14,boxShadow:'0 4px 20px rgba(0,0,0,.12)'}}>
+        <div style={{fontSize:26,fontWeight:800,color:di?'white':'#1E293B'}}>{nav.getDate()} {MN[nav.getMonth()]}</div>
+        <div style={{fontSize:13,color:di?'rgba(255,255,255,.75)':'#64748B',marginTop:2}}>{DNF[nav.getDay()]} · {nav.getFullYear()}</div>
+        {di&&<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>}
+        {!di&&<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
+      </div>
+      {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(
+        <Card><SecTitle icon="📋">Datos del servicio</SecTitle>
+          {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
+            <div key={k} style={{marginBottom:5,fontSize:12}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
+          ))}
+        </Card>
+      )}
+      {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(
+        <Card bg='#FFFBEB'>
+          <SecTitle icon="⏰">Horas extraordinarias</SecTitle>
+          {e.eh.d&&<div style={{fontSize:12,marginBottom:3}}>🌤 Diurnas: <b>{e.eh.d}h</b></div>}
+          {e.eh.n&&<div style={{fontSize:12,marginBottom:3}}>🌙 Nocturnas: <b>{e.eh.n}h</b></div>}
+          {e.eh.fd&&<div style={{fontSize:12,marginBottom:3}}>🎉 Festiva/Dom: <b>{e.eh.fd}h</b></div>}
+          {e.eh.dieta!=='none'&&<div style={{fontSize:12}}>🍽 Dieta: <b>{e.eh.dieta==='media'?'Media (+0.5h)':'Completa (+1h)'}</b></div>}
+        </Card>
+      )}
+      <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
+    </div>);
+  };
+  const YearView=()=>{
+    const y=nav.getFullYear();
+    return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+      {MNS.map((ms,mi)=>{
+        const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+        return(<div key={mi} style={{background:'white',borderRadius:12,padding:8,boxShadow:'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
+          onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
+          <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
+            {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
+            {[...Array(ld.getDate())].map((_,i)=>{
+              const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
+              return(<div key={i} onClick={e=>{e.stopPropagation();setNav(new Date(dk));setCv('day');}}
+                style={{aspectRatio:'1',background:di?di.c:isT?'#BFDBFE':'transparent',borderRadius:2,
+                  display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
+                  border:isT?'1px solid #1D4ED8':'none',color:di?'white':'#6B7280',fontWeight:isT?800:400}}>
+                {i+1}
+              </div>);
+            })}
+          </div>
+        </div>);
+      })}
+    </div>);
+  };
+  const LegendBar=()=>(
+    <div style={{marginTop:14,background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.06)'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
+        {[{c:TC,l:'TRABA'},{c:LC,l:'LIBRE'},{c:FC_WORK,l:'F.OBL'},{c:FC_REST,l:'FEST.D'},...cpts.map(c=>({c:c.c,l:c.a}))].map((x,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:3}}>
+            <div style={{width:9,height:9,borderRadius:2,background:x.c,flexShrink:0}}/>
+            <span style={{fontSize:8,color:'#6B7280',fontWeight:600}}>{x.l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if(!loaded)return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#F1F5F9',flexDirection:'column',gap:14}}>
+      <div style={{fontSize:42}}>👮</div>
+      <div style={{fontSize:14,color:'#64748B'}}>Cargando calendario…</div>
+    </div>
+  );
+
+  /* ════════════ RENDER ════════════ */
+  return(
+    <div style={{fontFamily:'system-ui,sans-serif',background:'#F1F5F9',minHeight:'100vh',width:'100%',paddingBottom:80}}>
+
+      {/* HEADER */}
+      <div style={{background:'linear-gradient(135deg,#1C1C2E,#2D2D44)',color:'white',padding:'13px 12px',boxShadow:'0 4px 16px rgba(0,0,0,.35)',position:'sticky',top:0,zIndex:20}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:800,letterSpacing:-.3,display:'flex',alignItems:'center',gap:8}}>
+              👮 Calendario Policial
+              {saveInd&&<span style={{fontSize:10,color:'#4ADE80',fontWeight:600}}>{saveInd} Guardado</span>}
+            </div>
+            <div style={{fontSize:9,opacity:.5,marginTop:1}}>{td.getFullYear()}</div>
+          </div>
+          <div style={{display:'flex',gap:5,flexShrink:0}}>
+            {[['⬇ Export',exportBackup],['⬆ Import',()=>{setImportText('');setImportModal(true);}],['📋',()=>setShowCP(true)]].map(([l,fn])=>(
+              <button key={l} onClick={fn} style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:18,padding:'6px 10px',color:'white',fontSize:10,cursor:'pointer',fontWeight:700}}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ CALENDAR ══ */}
+      {tab==='cal'&&(
+        <div style={{padding:12}}>
+          <div style={{display:'flex',gap:3,marginBottom:12,background:'#E2E8F0',borderRadius:24,padding:3}}>
+            {[['day','Día'],['week','Semana'],['month','Mes'],['year','Año']].map(([v,l])=>(
+              <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':'#64748B',fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .2s'}}>{l}</button>
+            ))}
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:'white',borderRadius:24,padding:'3px 6px',boxShadow:'0 1px 5px rgba(0,0,0,.07)'}}>
+            <button onClick={()=>goNav(-1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>‹</button>
+            <span style={{fontSize:12,fontWeight:700,color:'#1E293B'}}>{navTitle}</span>
+            <button onClick={()=>goNav(1)}  style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>›</button>
+          </div>
+          <div style={{textAlign:'right',marginBottom:10}}>
+            <button onClick={()=>{setNav(new Date(td));setCv('week');}} style={{background:'none',border:'1.5px solid #1D4ED8',borderRadius:16,padding:'4px 13px',fontSize:11,color:'#1D4ED8',cursor:'pointer',fontWeight:700}}>Hoy</button>
+          </div>
+          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+            {cv==='day'   &&<DayViewFull/>}
+            {cv==='week'  &&<WeekView/>}
+            {cv==='month' &&<MonthView/>}
+            {cv==='year'  &&<YearView/>}
+          </div>
+          {cv!=='day'&&<LegendBar/>}
+        </div>
+      )}
+
+      {/* ══ RESUMEN ══ */}
+      {tab==='sum'&&(
+        <div style={{padding:12}}>
+          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>📊 Resumen de conceptos</div>
+          <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,flex:1}}>
+              {[{k:'saldo',l:'Con saldo',v:cntSaldo,c:'#16A34A'},{k:'agotado',l:'Agotados',v:cntAgotado,c:'#DC2626'}].map(s=>(
+                <button key={s.k} onClick={()=>setSumFilt(f=>f===s.k?'all':s.k)}
+                  style={{background:sumFilt===s.k?s.c:'white',borderRadius:14,padding:'11px 6px',textAlign:'center',boxShadow:'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.c}`:'2px solid transparent',cursor:'pointer',transition:'all .2s'}}>
+                  <div style={{fontSize:22,fontWeight:800,color:sumFilt===s.k?'white':s.c}}>{s.v}</div>
+                  <div style={{fontSize:9,color:sumFilt===s.k?'rgba(255,255,255,.8)':'#94A3B8',fontWeight:600,marginTop:2}}>{s.l}</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={()=>setAddCptModal(true)}
+              style={{background:'#1D4ED8',border:'none',borderRadius:14,width:46,height:46,flexShrink:0,color:'white',fontSize:24,cursor:'pointer',boxShadow:'0 2px 8px #1D4ED844',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+          </div>
+          {sumFilt!=='all'&&(
+            <div style={{textAlign:'center',marginBottom:10}}>
+              <button onClick={()=>setSumFilt('all')} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:16,padding:'4px 14px',fontSize:11,color:'#64748B',cursor:'pointer'}}>Ver todos</button>
+            </div>
+          )}
+          {visibleCpts.map(c=>{
+            const isCarryBoth=c.carryover==='both',isCO=c.carryover===true;
+            const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
+            const bgCard=isCarryBoth?'#FFF8F0':isCO?'#F0FDF4':'white';
+            return(
+              <div key={c.id} style={{marginBottom:8,background:bgCard,borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.07)',borderLeft:`4px solid ${c.c}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+                  <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+                    <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
+                    {c.ag&&<span style={{fontSize:8,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AUTO</span>}
+                    {isCarryBoth&&<span style={{fontSize:8,background:'#FFE0B2',color:'#E65100',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AÑO ANT.</span>}
+                    {isCO&&<span style={{fontSize:8,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 6px',fontWeight:700}}>TRASPASO</span>}
+                    {(c.ag||isCO||isCarryBoth)&&<button onClick={()=>openAgModal(c.id,'t')} style={{fontSize:8,background:'#DCFCE7',color:'#15803D',border:'none',borderRadius:8,padding:'1px 7px',cursor:'pointer',fontWeight:700}}>✏️ Total</button>}
+                    {isCarryBoth&&<button onClick={()=>openAgModal(c.id,'us')} style={{fontSize:8,background:'#FDECEA',color:'#C62828',border:'none',borderRadius:8,padding:'1px 7px',cursor:'pointer',fontWeight:700}}>✏️ Usados</button>}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{textAlign:'right',fontSize:11,flexShrink:0}}>
+                      <span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span>
+                      <span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span>
+                    </div>
+                    {c.id.startsWith('USR_')&&(
+                      <button onClick={()=>{if(window.confirm(`¿Eliminar "${c.a}"?`))removeConcept(c.id);}}
+                        style={{background:'#FEF2F2',border:'none',borderRadius:8,padding:'3px 7px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑</button>
+                    )}
+                  </div>
+                </div>
+                <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:6}}>{c.n}</div>
+                {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+                {c.t===0&&<div style={{fontSize:10,color:'#CBD5E1',marginTop:3,fontStyle:'italic'}}>Sin total asignado</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ══ PATRÓN ══ */}
+      {tab==='pat'&&(
+        <div style={{padding:12}}>
+          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>🔄 Patrón de trabajo</div>
+          <Card>
+            <SecTitle icon="🔢">Secuencia de días</SecTitle>
+            <p style={{fontSize:11,color:'#94A3B8',marginBottom:10,lineHeight:1.6}}>Ej: 2 trabajo + 2 libre. Toca un badge para eliminarlo.</p>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:'#F8FAFC',borderRadius:12,marginBottom:12}}>
+              {pat.map((d,i)=>(
+                <span key={i} onClick={()=>setPat(p=>p.filter((_,idx)=>idx!==i))}
+                  style={{background:d==='work'?TC:LC,color:'white',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:700,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.15)'}}>
+                  {d==='work'?'T':'L'} ✕
+                </span>
+              ))}
+              {!pat.length&&<span style={{fontSize:11,color:'#CBD5E1',alignSelf:'center',marginLeft:4}}>Sin patrón</span>}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <select value={newPat} onChange={e=>setNewPat(e.target.value)}
+                style={{flex:1,borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+                <option value="work">● TRABAJO</option>
+                <option value="rest">○ LIBRE</option>
+              </select>
+              <Btn small onClick={()=>setPat(p=>[...p,newPat])}>+ Añadir</Btn>
+            </div>
+          </Card>
+          {[
+            {key:'mw',bg:'#FFF5F5',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays,desc:'rojo'},
+            {key:'mr',bg:'#F0FDF4',icon:'🟢',title:'Festivos de obligado descanso', color:FC_REST,days:mrDays,setDays:setMrDays,desc:'verde'},
+          ].map(({key,bg,icon,title,color,days,setDays,desc})=>(
+            <Card key={key} bg={bg}>
+              <SecTitle icon={icon}>{title}</SecTitle>
+              <p style={{fontSize:10,color:'#94A3B8',marginBottom:10}}>Aparecen en <b style={{color}}>color {desc}</b> en el calendario.</p>
+              <Btn full color={color} onClick={()=>{setMpModal(key);setMpSel(new Set(days));setMpNav(new Date(td));}}>
+                📅 Seleccionar fechas en calendario
+              </Btn>
+              {days.length>0&&(
+                <div style={{marginTop:10}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#64748B',marginBottom:5}}>{days.length} día{days.length>1?'s':''} configurado{days.length>1?'s':''} · toca para eliminar</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                    {[...days].sort().map(d=>(
+                      <span key={d} onClick={()=>setDays(p=>p.filter(x=>x!==d))}
+                        style={{background:color,color:'white',borderRadius:12,padding:'3px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>
+                        {d.slice(5)} ✕
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          ))}
+          <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
+          <div style={{height:1,background:'#E2E8F0',margin:'16px 0'}}/>
+          <Card bg='#FFF7ED'>
+            <SecTitle icon="🗓">Reinicio de año</SecTitle>
+            <p style={{fontSize:11,color:'#92400E',marginBottom:10,lineHeight:1.5}}>
+              Traspasos automáticos:<br/>
+              <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b>
+            </p>
+            <Btn full color='#C2410C' onClick={()=>{if(window.confirm('¿Confirmar reinicio de año con traspasos?'))doYearReset();}}>
+              🔁 Reinicio de año nuevo
+            </Btn>
+          </Card>
+        </div>
+      )}
+
+      {/* ══ GRÁFICA ══ */}
+      {tab==='chart'&&(
+        <div style={{padding:12}}>
+          <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>Distribución · Totales</div>
+          <Card bg='#EFF6FF'>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{width:44,height:44,borderRadius:'50%',background:TC,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>👮</div>
+              <div>
+                <div style={{fontSize:24,fontWeight:800,color:'#1D4ED8'}}>{workedCount}</div>
+                <div style={{fontSize:11,color:'#64748B'}}>Días trabajados en {td.getFullYear()}</div>
+              </div>
+            </div>
+          </Card>
+          {pieData.length===0
+            ?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:'#CBD5E1',marginTop:10}}>Sin totales configurados.</p></div>
+            :<>
+              <Card>
+                <ResponsiveContainer width="100%" height={290}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      outerRadius={112} innerRadius={42} paddingAngle={1.5}
+                      label={({name,percent})=>percent>0.03?`${name} ${(percent*100).toFixed(0)}%`:''}
+                      labelLine={false}>
+                      {pieData.map((e,i)=><Cell key={i} fill={e.color} stroke="white" strokeWidth={2}/>)}
+                    </Pie>
+                    <Tooltip formatter={(v,_,p)=>[`${p.payload.total} ${p.payload.unit}`,p.payload.full]}/>
+                  </PieChart>
+                </ResponsiveContainer>
+              </Card>
+              <Card>
+                {pieData.map((d,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<pieData.length-1?'1px solid #F1F5F9':'none'}}>
+                    <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:700,color:'#1E293B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</div>
+                      <div style={{fontSize:9,color:'#94A3B8'}}>{d.full.substring(0,34)}</div>
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:'#475569'}}>{d.total} {d.unit}</div>
+                  </div>
+                ))}
+              </Card>
+            </>
+          }
+        </div>
+      )}
+
+      {/* BOTTOM NAV */}
+      <div style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'1px solid #E2E8F0',display:'flex',justifyContent:'space-around',padding:'6px 0 8px',boxShadow:'0 -3px 14px rgba(0,0,0,.08)',zIndex:10}}>
+        {[{id:'cal',ico:'📅',l:'Calendario'},{id:'sum',ico:'📊',l:'Resumen'},{id:'pat',ico:'🔄',l:'Patrón'},{id:'chart',ico:null,l:'Gráfica'}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 8px',color:tab===t.id?'#1D4ED8':'#94A3B8',transition:'color .2s'}}>
+            {t.ico?<span style={{fontSize:21}}>{t.ico}</span>:<PieTabIcon active={tab===t.id}/>}
+            <span style={{fontSize:9,fontWeight:tab===t.id?800:500}}>{t.l}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ══ DAY MODAL ══ */}
+      {selDay&&selDateObj&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',zIndex:100,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget)setSelDay(null);}}>
+          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)'}}>
+            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 18px'}}/>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:'#1E3A8A'}}>{DNF[selDateObj.getDay()]} {selDateObj.getDate()}</div>
+                <div style={{fontSize:12,color:'#94A3B8',marginTop:1}}>{MN[selDateObj.getMonth()]} {selDateObj.getFullYear()}</div>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                {ents[selDay]&&<button onClick={delEntry} style={{background:'#FEF2F2',border:'none',borderRadius:20,padding:'6px 13px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Borrar</button>}
+                <button onClick={()=>setSelDay(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+              </div>
+            </div>
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
+              <div style={{position:'relative'}}>
+                <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,hm:'full',hrs:8}))}
+                  style={{width:'100%',borderRadius:24,border:'1.5px solid #E2E8F0',padding:'11px 18px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600,boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
+                  <option value="TRABA">● TRABA — Trabajo</option>
+                  <option value="LIBRE">○ LIBRE — Día libre</option>
+                  {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,32)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
+                </select>
+                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94A3B8',fontSize:11}}>▼</span>
+              </div>
+            </div>
+            {isHourCpt&&(
+              <div style={{marginBottom:16}}>
+                <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
+                <div style={{display:'flex',gap:6}}>
+                  {[['full','● Día completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
+                    <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
+                      style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':'#F1F5F9',color:form.hm===v?'white':'#64748B',fontSize:10,fontWeight:700,cursor:'pointer',transition:'all .15s'}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {form.hm!=='full'&&(
+                  <div style={{marginTop:10}}>
+                    <label style={{fontSize:10,color:'#64748B',display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
+                    <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
+                      style={{width:'100%',borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit'}}/>
+                  </div>
+                )}
+              </div>
+            )}
+            {form.type==='TRABA'&&(
+              <div style={{background:'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
+                <SecTitle icon="📋">Datos del servicio</SecTitle>
+                {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula o código'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción del puesto']].map(([k,l,ph])=>(
+                  <InputRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+                ))}
+                <InputRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
+              </div>
+            )}
+            {(form.type==='TRABA'||form.type==='LIBRE')&&(
+              <div style={{background:'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
+                <SecTitle icon="⏰">Horas extraordinarias</SecTitle>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
+                    <div key={k}>
+                      <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
+                      <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
+                        onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
+                        style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:'white',fontFamily:'inherit'}}/>
+                    </div>
+                  ))}
+                  <div>
+                    <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
+                    <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
+                      style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+                      <option value="none">Sin dieta</option>
+                      <option value="media">Media (+0.5h)</option>
+                      <option value="completa">Completa (+1h)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+            <Btn full onClick={saveEntry}>💾 Guardar día</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ══ CONCEPTS PANEL ══ */}
+      {showCP&&(
+        <div style={{position:'fixed',inset:0,background:'white',zIndex:200,overflowY:'auto'}}>
+          <div style={{background:'linear-gradient(135deg,#1C1C2E,#2D2D44)',color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{fontSize:16,fontWeight:800}}>📋 Todos los conceptos</div>
+              <button onClick={()=>setShowCP(false)} style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:20,padding:'7px 14px',color:'white',fontSize:12,cursor:'pointer',fontWeight:700}}>✕ Cerrar</button>
+            </div>
+          </div>
+          <div style={{padding:12}}>
+            {cpts.map(c=>{
+              const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
+              return(
+                <div key={c.id} style={{marginBottom:8,background:'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <div style={{width:10,height:10,borderRadius:2,background:c.c}}/>
+                      <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
+                      {c.ag&&<span style={{fontSize:8,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 6px',fontWeight:700}}>AUTO</span>}
+                      {c.carryover&&<span style={{fontSize:8,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 6px',fontWeight:700}}>{c.carryover==='both'?'AÑO ANT.':'TRASPASO'}</span>}
+                    </div>
+                    <div style={{textAlign:'right',fontSize:11}}>
+                      <span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span>
+                      <span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span>
+                    </div>
+                  </div>
+                  <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:5}}>{c.n}</div>
+                  {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MULTI-DATE PICKER ══ */}
+      {mpModal&&(()=>{
+        const isMw=mpModal==='mw';
+        const color=isMw?FC_WORK:FC_REST;
+        const y=mpNav.getFullYear(),m=mpNav.getMonth();
+        const fd=new Date(y,m,1),ld=new Date(y,m+1,0);
+        const off=fd.getDay()===0?6:fd.getDay()-1;
+        const toggleDay=dk=>{setMpSel(prev=>{const s=new Set(prev);s.has(dk)?s.delete(dk):s.add(dk);return s;});};
+        const confirm=()=>{
+          const arr=[...mpSel];
+          if(isMw)setMwDays([...new Set(arr)]);
+          else    setMrDays([...new Set(arr)]);
+          setMpModal(null);
+        };
+        return(
+          <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+            <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.3)'}}>
+              <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 14px'}}/>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:800,color:'#1E293B'}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
+                  <div style={{fontSize:11,color:'#94A3B8',marginTop:2}}>Toca los días para seleccionar/deseleccionar</div>
+                </div>
+                <button onClick={()=>setMpModal(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+              </div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F8FAFC',borderRadius:20,padding:'6px 8px',marginBottom:12}}>
+                <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;})}
+                  style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>‹</button>
+                <span style={{fontSize:13,fontWeight:700,color:'#1E293B'}}>{MN[m]} {y}</span>
+                <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;})}
+                  style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>›</button>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:4}}>
+                {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:14}}>
+                {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
+                {[...Array(ld.getDate())].map((_,i)=>{
+                  const d=new Date(y,m,i+1),dk=toKey(d),sel=mpSel.has(dk);
+                  const isT=dk===tk,dow=d.getDay(),isWE=dow===0||dow===6;
+                  return(
+                    <div key={i} onClick={()=>toggleDay(dk)}
+                      style={{aspectRatio:'1',background:sel?color:isT?'#DBEAFE':'#F8FAFC',borderRadius:10,
+                        display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',
+                        border:sel?`2px solid ${color}`:isT?'2px solid #1D4ED8':'1.5px solid #E5E7EB',
+                        boxShadow:sel?`0 2px 8px ${color}55`:'none',transition:'all .15s',userSelect:'none'}}>
+                      <span style={{fontSize:12,fontWeight:sel?800:500,color:sel?'white':isT?'#1D4ED8':isWE?'#DC2626':'#374151'}}>{i+1}</span>
+                      {sel&&<div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,.7)',marginTop:1}}/>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{background:mpSel.size>0?`${color}18`:'#F8FAFC',borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:'#94A3B8'}}>{mpSel.size} día{mpSel.size!==1?'s':''} seleccionado{mpSel.size!==1?'s':''}</div>
+                  {mpSel.size>0&&<div style={{fontSize:10,color:'#64748B',marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
+                </div>
+                {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:12,padding:'4px 10px',fontSize:10,color:'#64748B',cursor:'pointer',fontWeight:600,flexShrink:0}}>Limpiar</button>}
+              </div>
+              <Btn full color={color} disabled={mpSel.size===0} onClick={confirm}>
+                ✅ Añadir {mpSel.size} día{mpSel.size!==1?'s':''} al calendario
+              </Btn>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══ AG MODAL ══ */}
+      {agModal&&(()=>{
+        const c=cpts.find(x=>x.id===agModal);if(!c)return null;
+        const title=agTarget==='us'?'Editar horas usadas':'Editar total';
+        return(
+          <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+            <div style={{background:'white',borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.22)'}}>
+              <div style={{fontSize:15,fontWeight:800,color:'#1E3A8A',marginBottom:4}}>{c.a} · {title}</div>
+              <div style={{fontSize:11,color:'#94A3B8',marginBottom:16}}>{c.n}</div>
+              <InputRow label={`Valor en ${c.u}`} type="number" ph="Ej: 43.3" value={agAmt} onChange={v=>setAgAmt(v)}/>
+              <div style={{display:'flex',gap:8,marginTop:14}}>
+                <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
+                <Btn full onClick={()=>{
+                  const v=parseFloat(agAmt);
+                  if(!isNaN(v)&&v>=0){
+                    if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));
+                    else               setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));
+                  }
+                  setAgModal(null);
+                }}>Guardar</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══ ADD CONCEPT MODAL ══ */}
+      {addCptModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.65)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
+            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>➕ Nuevo concepto</div>
+            <InputRow label="Abreviatura (ej: MICP)" ph="Máx. 10 caracteres" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
+            <InputRow label="Nombre completo" ph="Descripción del concepto" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Total</label>
+                <input type="number" min="0" step="0.5" value={newCpt.t} onChange={e=>setNewCpt(p=>({...p,t:e.target.value}))}
+                  style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Unidad</label>
+                <select value={newCpt.u} onChange={e=>setNewCpt(p=>({...p,u:e.target.value}))}
+                  style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+                  <option value="d">Días (d)</option>
+                  <option value="H">Horas (H)</option>
+                </select>
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:5,textTransform:'uppercase',letterSpacing:.4}}>Color identificativo</label>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
+                  <div key={col} onClick={()=>setNewCpt(p=>({...p,c:col}))}
+                    style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',
+                      border:newCpt.c===col?'3px solid #1E293B':'3px solid transparent',
+                      boxShadow:newCpt.c===col?'0 0 0 2px white inset':'none',transition:'all .15s'}}/>
+                ))}
+                <input type="color" value={newCpt.c} onChange={e=>setNewCpt(p=>({...p,c:e.target.value}))}
+                  style={{width:28,height:28,borderRadius:8,border:'1.5px solid #E0E0E0',padding:2,cursor:'pointer'}}/>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <Btn full outline onClick={()=>setAddCptModal(false)}>Cancelar</Btn>
+              <Btn full disabled={!newCpt.a.trim()} onClick={addConcept}>✅ Añadir concepto</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ EXPORT MODAL ══ */}
+      {exportModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget)setExportModal(false);}}>
+          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.3)'}}>
+            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>⬇ Exportar datos</div>
+            {copyOk
+              ?<div style={{background:'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
+              :<div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto de abajo y guárdalo (Drive, notas, etc.).</div>
+            }
+            <textarea readOnly value={exportJson} rows={7}
+              style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}
+              onClick={e=>e.target.select()}/>
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
+              <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ IMPORT MODAL ══ */}
+      {importModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget)setImportModal(false);}}>
+          <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.3)'}}>
+            <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>⬆ Importar datos</div>
+            <div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>
+              Pega aquí el JSON exportado. Se sobreescribirán todos los datos actuales.
+            </div>
+            <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
+              style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
+              <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
