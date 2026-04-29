@@ -1,4 +1,4 @@
-const CACHE = 'cal-policial-v1';
+const CACHE = 'cal-policial-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const ASSETS = [
   'https://unpkg.com/react@18.2.0/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone@7.23.5/babel.min.js',
-  'https://unpkg.com/recharts@2.8.0/umd/Recharts.js',
 ];
 
 // Instalar: guarda todos los assets en caché
