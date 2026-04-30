@@ -145,6 +145,61 @@ const PieSVG=({data,cardBg})=>{
   );
 };
 
+/* ══════════════════════════════════════════════════════
+   THEMED COMPONENTS — definidos FUERA de App para que
+   React no los desmonte en cada re-render (bug teclado)
+   ══════════════════════════════════════════════════════ */
+const Card=({children,bg,style={},th})=>(
+  <div style={{background:bg||th.cardBg,borderRadius:16,padding:14,boxShadow:th.dm?'0 1px 8px rgba(0,0,0,.3)':'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
+);
+const STitle=({icon,children,th})=>(
+  <div style={{fontSize:13,fontWeight:800,color:th.sectionTitle,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+    {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
+  </div>
+);
+const IRow=({label,value,onChange,type='text',ph='',multiline,opts,th})=>(
+  <div style={{marginBottom:9}}>
+    <label style={{fontSize:10,fontWeight:700,color:th.textSub,display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
+    {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,background:th.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:th.text}}>
+        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
+    :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
+        style={{width:'100%',borderRadius:12,border:`1.5px solid ${th.inputBorder}`,padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:th.inputBg,color:th.text}}/>
+    :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
+        style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:th.inputBg,color:th.text}}/>}
+  </div>
+);
+const ModalShell=({children,onClose,title,th})=>(
+  <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.65)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+    onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:th.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'18px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
+      <div style={{width:36,height:4,background:th.border,borderRadius:2,margin:'0 auto 16px'}}/>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:800,color:th.sectionTitle}}>{title}</div>
+        <button onClick={onClose} style={{background:th.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:th.textSub,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+const ColorPicker=({value,onChange,th})=>(
+  <div style={{marginBottom:14}}>
+    <label style={{fontSize:10,fontWeight:700,color:th.textSub,display:'block',marginBottom:8,textTransform:'uppercase'}}>Color</label>
+    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:8}}>
+      {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
+        <div key={col} onClick={()=>onChange(col)}
+          style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',flexShrink:0,
+            border:value===col?'3px solid '+th.text:'3px solid transparent'}}/>
+      ))}
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <label style={{fontSize:11,color:th.textSub,fontWeight:600}}>Paleta completa:</label>
+      <input type="color" value={value} onChange={e=>onChange(e.target.value)}
+        style={{width:44,height:44,borderRadius:12,border:`2px solid ${th.inputBorder}`,padding:3,cursor:'pointer',flexShrink:0,background:th.inputBg}}/>
+      <div style={{width:44,height:44,borderRadius:12,background:value,border:`2px solid ${th.border}`}}/>
+    </div>
+  </div>
+);
+
 /* ════════════ APP ════════════ */
 function App(){
   const td=useMemo(()=>{const d=new Date();d.setHours(0,0,0,0);return d;},[]);
@@ -187,6 +242,7 @@ function App(){
   /* ── theme ── */
   const dm=settings.darkMode||false;
   const TH=dm?{
+    dm:true,
     pageBg:'#0F172A',cardBg:'#1E293B',cardBg2:'#162032',
     text:'#E2E8F0',textSub:'#94A3B8',border:'#334155',
     inputBg:'#0F172A',inputBorder:'#475569',navBg:'#1E293B',navBorder:'#334155',
@@ -195,6 +251,7 @@ function App(){
     tagOrangeBg:'#431407',tagOrangeText:'#FED7AA',
     calEmpty:'#1E293B',calToday:'#1E3A5F',calTodayBorder:'#3B82F6',
   }:{
+    dm:false,
     pageBg:'#F1F5F9',cardBg:'white',cardBg2:'#FAFAFA',
     text:'#1E293B',textSub:'#64748B',border:'#E5E7EB',
     inputBg:'white',inputBorder:'#E0E0E0',navBg:'white',navBorder:'#E2E8F0',
@@ -325,7 +382,6 @@ function App(){
   const saveEntry=()=>{
     if(!selDay)return;
     const old=ents[selDay],oType=old?.type,nType=form.type;
-    // concept usage
     if(oType&&!['TRABA','LIBRE','FEST_REST'].includes(oType)){
       const oc=cpts.find(c=>c.id===oType);
       if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===oType?{...c,us:Math.max(0,c.us-r)}:c));}
@@ -334,7 +390,6 @@ function App(){
       const nc=cpts.find(c=>c.id===nType);
       if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
     }
-    // HLIBS adjustment for librar hours
     const oldLib=getLibrarH(old?.eh),newLib=getLibrarH(form.eh);
     if(oldLib!==newLib){
       setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-oldLib+newLib).toFixed(2))}:c));
@@ -423,40 +478,6 @@ function App(){
   const isHourCpt=selCpt?.u==='H';
   const selDateObj=selDay?fromKey(selDay):null;
 
-  /* ── shared themed components (inside App for TH access) ── */
-  const Card=({children,bg,style={}})=>(
-    <div style={{background:bg||TH.cardBg,borderRadius:16,padding:14,boxShadow:dm?'0 1px 8px rgba(0,0,0,.3)':'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
-  );
-  const STitle=({icon,children})=>(
-    <div style={{fontSize:13,fontWeight:800,color:TH.sectionTitle,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
-      {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
-    </div>
-  );
-  const IRow=({label,value,onChange,type='text',ph='',multiline,opts})=>(
-    <div style={{marginBottom:9}}>
-      <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
-      {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
-          {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
-      :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
-          style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:TH.inputBg,color:TH.text}}/>
-      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
-          style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>}
-    </div>
-  );
-  const ModalShell=({children,onClose,title})=>(
-    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.65)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:TH.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'18px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
-        <div style={{width:36,height:4,background:TH.border,borderRadius:2,margin:'0 auto 16px'}}/>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <div style={{fontSize:16,fontWeight:800,color:TH.sectionTitle}}>{title}</div>
-          <button onClick={onClose} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-
   /* ── Day Cell ── */
   const DayCell=({dk,weekMode})=>{
     const dateObj=fromKey(dk),num=dateObj.getDate();
@@ -509,11 +530,11 @@ function App(){
       {di?<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>
         :<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
     </div>
-    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(<Card><STitle icon="📋">Datos del servicio</STitle>
+    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(<Card th={TH}><STitle th={TH} icon="📋">Datos del servicio</STitle>
       {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
         <div key={k} style={{marginBottom:5,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
       ))}</Card>)}
-    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(<Card bg={dm?'#2D2000':'#FFFBEB'}><STitle icon="⏰">Horas extraordinarias</STitle>
+    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(<Card th={TH} bg={dm?'#2D2000':'#FFFBEB'}><STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
         {e.eh.d&&<span style={{fontSize:12,color:TH.text}}>🌤 <b>{e.eh.d}h</b></span>}
         {e.eh.n&&<span style={{fontSize:12,color:TH.text}}>🌙 <b>{e.eh.n}h</b></span>}
@@ -525,7 +546,7 @@ function App(){
         background:e.eh.tipo==='librar'?'#DCFCE7':'#FEF9C3',color:e.eh.tipo==='librar'?'#15803D':'#92400E'}}>
         {e.eh.tipo==='librar'?'✓ A librar':'💶 A cobrar'}</div>
     </Card>)}
-    {e?.juicio?.active&&(<Card bg={dm?'#1A0F2E':'#F3E8FF'}><STitle icon="⚖️">Juicio</STitle>
+    {e?.juicio?.active&&(<Card th={TH} bg={dm?'#1A0F2E':'#F3E8FF'}><STitle th={TH} icon="⚖️">Juicio</STitle>
       {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
         <div key={k} style={{marginBottom:4,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
       ))}</Card>)}
@@ -590,25 +611,6 @@ function App(){
       </div>}
     </div>);
   };
-
-  const ColorPicker=({value,onChange})=>(
-    <div style={{marginBottom:14}}>
-      <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:8,textTransform:'uppercase'}}>Color</label>
-      <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:8}}>
-        {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
-          <div key={col} onClick={()=>onChange(col)}
-            style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',flexShrink:0,
-              border:value===col?'3px solid '+TH.text:'3px solid transparent'}}/>
-        ))}
-      </div>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
-        <label style={{fontSize:11,color:TH.textSub,fontWeight:600}}>Paleta completa:</label>
-        <input type="color" value={value} onChange={e=>onChange(e.target.value)}
-          style={{width:44,height:44,borderRadius:12,border:`2px solid ${TH.inputBorder}`,padding:3,cursor:'pointer',flexShrink:0,background:TH.inputBg}}/>
-        <div style={{width:44,height:44,borderRadius:12,background:value,border:`2px solid ${TH.border}`}}/>
-      </div>
-    </div>
-  );
 
   if(!loaded)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:TH.pageBg,flexDirection:'column',gap:14}}>
     <LogoPM size={60}/><div style={{fontSize:14,color:'#64748B'}}>Cargando…</div></div>);
@@ -737,8 +739,8 @@ function App(){
   {tab==='pat'&&(
     <div style={{padding:12}}>
       <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:14}}>🔄 Patrón de trabajo</div>
-      <Card>
-        <STitle icon="🔢">Secuencia de días</STitle>
+      <Card th={TH}>
+        <STitle th={TH} icon="🔢">Secuencia de días</STitle>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:TH.cardBg2,borderRadius:12,marginBottom:12}}>
           {pat.map((d,i)=>(
             <span key={i} onClick={()=>setPat(p=>p.filter((_,idx)=>idx!==i))}
@@ -757,8 +759,8 @@ function App(){
       </Card>
       {[{key:'mw',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays},
         {key:'mr',icon:'🟢',title:'Festivos de obligado descanso',color:FC_REST,days:mrDays,setDays:setMrDays}].map(({key,icon,title,color,days,setDays})=>(
-        <Card key={key}>
-          <STitle icon={icon}>{title}</STitle>
+        <Card key={key} th={TH}>
+          <STitle th={TH} icon={icon}>{title}</STitle>
           <Btn full color={color} onClick={()=>{setMpModal(key);setMpSel(new Set(days));setMpNav(new Date(td));}}>
             📅 Seleccionar fechas en calendario</Btn>
           {days.length>0&&<div style={{marginTop:10}}>
@@ -772,8 +774,8 @@ function App(){
       ))}
       <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
       <div style={{height:1,background:TH.border,margin:'16px 0'}}/>
-      <Card>
-        <STitle icon="🗓">Reinicio de año</STitle>
+      <Card th={TH}>
+        <STitle th={TH} icon="🗓">Reinicio de año</STitle>
         <p style={{fontSize:11,color:TH.textSub,marginBottom:10,lineHeight:1.5}}>Traspasos: <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b></p>
         <Btn full color='#C2410C' onClick={()=>{if(window.confirm('¿Confirmar reinicio de año con traspasos?'))doYearReset();}}>🔁 Reinicio de año nuevo</Btn>
       </Card>
@@ -786,8 +788,8 @@ function App(){
       <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:6}}>Distribución consumida · {td.getFullYear()}</div>
       <div style={{fontSize:11,color:TH.textSub,marginBottom:14}}>Solo días ya transcurridos y registrados, al 100%.</div>
       {consumedPie.length===0?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:TH.textSub,marginTop:10}}>Sin datos hasta hoy.</p></div>
-        :<><Card><PieSVG data={consumedPie} cardBg={TH.cardBg}/></Card>
-          <Card>{consumedPie.map((d,i)=>(
+        :<><Card th={TH}><PieSVG data={consumedPie} cardBg={TH.cardBg}/></Card>
+          <Card th={TH}>{consumedPie.map((d,i)=>(
             <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<consumedPie.length-1?`1px solid ${TH.border}`:'none'}}>
               <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
@@ -855,15 +857,15 @@ function App(){
         </div>)}
         {/* Datos servicio */}
         {form.type==='TRABA'&&(<div style={{background:dm?'#0C1A2E':'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
-          <STitle icon="📋">Datos del servicio</STitle>
+          <STitle th={TH} icon="📋">Datos del servicio</STitle>
           {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
-            <IRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+            <IRow key={k} th={TH} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
           ))}
-          <IRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
+          <IRow th={TH} label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
         </div>)}
         {/* Horas extra */}
         {(form.type==='TRABA'||form.type==='LIBRE')&&(<div style={{background:dm?'#1A1400':'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
-          <STitle icon="⏰">Horas extraordinarias</STitle>
+          <STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
             {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
               <div key={k}>
@@ -881,9 +883,7 @@ function App(){
               </select>
             </div>
           </div>
-          {/* Motivo */}
-          <IRow label="Motivo de las horas" ph="Ej: Operación especial, guardia extra…" value={form.eh.motivo||''} onChange={v=>setForm(f=>({...f,eh:{...f.eh,motivo:v}}))}/>
-          {/* Cobrar / Librar */}
+          <IRow th={TH} label="Motivo de las horas" ph="Ej: Operación especial, guardia extra…" value={form.eh.motivo||''} onChange={v=>setForm(f=>({...f,eh:{...f.eh,motivo:v}}))}/>
           <div style={{marginTop:4}}>
             <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:6,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Compensación</label>
             <div style={{display:'flex',gap:8}}>
@@ -904,7 +904,7 @@ function App(){
         {/* Juicio */}
         <div style={{background:dm?'#1A0F2E':'#F3E8FF',borderRadius:16,padding:14,marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:form.juicio.active?12:0}}>
-            <STitle icon="⚖️">Juicio</STitle>
+            <STitle th={TH} icon="⚖️">Juicio</STitle>
             <div style={{display:'flex',gap:6}}>
               {form.juicio.active&&(
                 <button onClick={()=>setForm(f=>({...f,juicio:{...EF.juicio}}))}
@@ -917,13 +917,13 @@ function App(){
             </div>
           </div>
           {form.juicio.active&&(<>
-            <IRow label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
-            <IRow label="Fecha del juicio" type="date" value={form.juicio.fecha} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,fecha:v}}))}/>
+            <IRow th={TH} label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
+            <IRow th={TH} label="Fecha del juicio" type="date" value={form.juicio.fecha} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,fecha:v}}))}/>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <IRow label="Hora inicio" type="time" value={form.juicio.horaInicio} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaInicio:v}}))}/>
-              <IRow label="Hora fin" type="time" value={form.juicio.horaFin} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaFin:v}}))}/>
+              <IRow th={TH} label="Hora inicio" type="time" value={form.juicio.horaInicio} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaInicio:v}}))}/>
+              <IRow th={TH} label="Hora fin" type="time" value={form.juicio.horaFin} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaFin:v}}))}/>
             </div>
-            <IRow label="Término municipal" value={form.juicio.termMunicipal}
+            <IRow th={TH} label="Término municipal" value={form.juicio.termMunicipal}
               onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,termMunicipal:v}}))}
               opts={[{v:'dentro',l:'Dentro del término'},{v:'fuera',l:'Fuera del término'}]}/>
           </>)}
@@ -1016,7 +1016,7 @@ function App(){
       <div style={{background:TH.cardBg,borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.25)'}}>
         <div style={{fontSize:15,fontWeight:800,color:TH.sectionTitle,marginBottom:4}}>{c.a} · {agTarget==='us'?'Editar usados':'Editar total'}</div>
         <div style={{fontSize:11,color:TH.textSub,marginBottom:16}}>{c.n}</div>
-        <IRow label={`Valor en ${c.u}`} type="number" ph="Ej: 8" value={agAmt} onChange={v=>setAgAmt(v)}/>
+        <IRow th={TH} label={`Valor en ${c.u}`} type="number" ph="Ej: 8" value={agAmt} onChange={v=>setAgAmt(v)}/>
         <div style={{display:'flex',gap:8,marginTop:14}}>
           <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
           <Btn full onClick={()=>{const v=parseFloat(agAmt);if(!isNaN(v)&&v>=0){if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));else setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));}setAgModal(null);}}>Guardar</Btn>
@@ -1027,9 +1027,9 @@ function App(){
 
   {/* ═══ ADD CONCEPT ═══ */}
   {addCptModal&&(
-    <ModalShell title="➕ Nuevo concepto" onClose={()=>setAddCptModal(false)}>
-      <IRow label="Abreviatura (máx. 10)" ph="Ej: MICP" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
-      <IRow label="Nombre completo" ph="Descripción" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
+    <ModalShell th={TH} title="➕ Nuevo concepto" onClose={()=>setAddCptModal(false)}>
+      <IRow th={TH} label="Abreviatura (máx. 10)" ph="Ej: MICP" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
+      <IRow th={TH} label="Nombre completo" ph="Descripción" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
         <div>
           <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
@@ -1044,7 +1044,7 @@ function App(){
           </select>
         </div>
       </div>
-      <ColorPicker value={newCpt.c} onChange={v=>setNewCpt(p=>({...p,c:v}))}/>
+      <ColorPicker th={TH} value={newCpt.c} onChange={v=>setNewCpt(p=>({...p,c:v}))}/>
       <div style={{display:'flex',gap:8}}>
         <Btn full outline onClick={()=>setAddCptModal(false)}>Cancelar</Btn>
         <Btn full disabled={!newCpt.a.trim()} onClick={addConcept}>✅ Añadir</Btn>
@@ -1054,9 +1054,9 @@ function App(){
 
   {/* ═══ EDIT CONCEPT ═══ */}
   {editCptId&&editCptData&&(
-    <ModalShell title="✏️ Editar concepto" onClose={()=>{setEditCptId(null);setEditCptData(null);}}>
-      <IRow label="Abreviatura (máx. 10)" ph="Ej: VACAN" value={editCptData.a} onChange={v=>setEditCptData(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
-      <IRow label="Nombre completo" ph="Descripción" value={editCptData.n} onChange={v=>setEditCptData(p=>({...p,n:v}))}/>
+    <ModalShell th={TH} title="✏️ Editar concepto" onClose={()=>{setEditCptId(null);setEditCptData(null);}}>
+      <IRow th={TH} label="Abreviatura (máx. 10)" ph="Ej: VACAN" value={editCptData.a} onChange={v=>setEditCptData(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
+      <IRow th={TH} label="Nombre completo" ph="Descripción" value={editCptData.n} onChange={v=>setEditCptData(p=>({...p,n:v}))}/>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
         <div>
           <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
@@ -1071,7 +1071,7 @@ function App(){
           </select>
         </div>
       </div>
-      <ColorPicker value={editCptData.c} onChange={v=>setEditCptData(p=>({...p,c:v}))}/>
+      <ColorPicker th={TH} value={editCptData.c} onChange={v=>setEditCptData(p=>({...p,c:v}))}/>
       <div style={{display:'flex',gap:8}}>
         <Btn full outline onClick={()=>{setEditCptId(null);setEditCptData(null);}}>Cancelar</Btn>
         <Btn full disabled={!editCptData.a.trim()} onClick={saveEditCpt}>💾 Guardar cambios</Btn>
@@ -1089,9 +1089,8 @@ function App(){
         </div>
       </div>
       <div style={{padding:12}}>
-        {/* Dark mode */}
-        <Card>
-          <STitle icon="🌙">Modo oscuro / claro</STitle>
+        <Card th={TH}>
+          <STitle th={TH} icon="🌙">Modo oscuro / claro</STitle>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:TH.text}}>{dm?'Modo oscuro activo':'Modo claro activo'}</div>
@@ -1103,9 +1102,8 @@ function App(){
             </button>
           </div>
         </Card>
-        {/* Header color */}
-        <Card>
-          <STitle icon="🎨">Color del encabezado</STitle>
+        <Card th={TH}>
+          <STitle th={TH} icon="🎨">Color del encabezado</STitle>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <input type="color" value={settings.headerColor||'#1C1C2E'} onChange={e=>setSettings(s=>({...s,headerColor:e.target.value}))}
               style={{width:52,height:52,borderRadius:14,border:`2px solid ${TH.border}`,padding:4,cursor:'pointer',flexShrink:0,background:TH.inputBg}}/>
@@ -1122,9 +1120,8 @@ function App(){
             </div>
           </div>
         </Card>
-        {/* Logo */}
-        <Card>
-          <STitle icon="🖼️">Logo / Icono</STitle>
+        <Card th={TH}>
+          <STitle th={TH} icon="🖼️">Logo / Icono</STitle>
           <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
             {LOGO_OPTS.map(o=>(
               <div key={o.id} onClick={()=>setSettings(s=>({...s,logoType:o.id}))}
@@ -1136,9 +1133,8 @@ function App(){
             ))}
           </div>
         </Card>
-        {/* Profiles */}
-        <Card>
-          <STitle icon="👤">Perfiles (máx. 4)</STitle>
+        <Card th={TH}>
+          <STitle th={TH} icon="👤">Perfiles (máx. 4)</STitle>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {Array.from({length:4},(_,i)=>{const p=profiles[i];return(
               <div key={i} style={{border:activeProf===i&&p?'2px solid #1D4ED8':`2px solid ${TH.border}`,borderRadius:14,padding:12,
@@ -1166,9 +1162,8 @@ function App(){
             );})}
           </div>
         </Card>
-        {/* Widgets */}
-        <Card>
-          <STitle icon="📦">Widgets del calendario</STitle>
+        <Card th={TH}>
+          <STitle th={TH} icon="📦">Widgets del calendario</STitle>
           {settings.widgets.map((w,i)=>(
             <div key={w.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<settings.widgets.length-1?`1px solid ${TH.border}`:'none'}}>
               <button onClick={()=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,show:!ww.show}:ww)}))}
@@ -1186,7 +1181,7 @@ function App(){
 
   {/* ═══ WIDGET MODALS ═══ */}
   {widgetModal==='overtime'&&(
-    <ModalShell title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'HORAS EXTRAS 💶'}`} onClose={()=>setWidgetModal(null)}>
+    <ModalShell th={TH} title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'HORAS EXTRAS 💶'}`} onClose={()=>setWidgetModal(null)}>
       <div style={{marginBottom:12,background:dm?'#1A1000':'#FFFBEB',borderRadius:14,padding:12,textAlign:'center'}}>
         <div style={{fontSize:28,fontWeight:800,color:'#F59E0B'}}>{overtimeCobrar.toFixed(1)}h</div>
         <div style={{fontSize:11,color:TH.textSub}}>Horas a cobrar en {td.getFullYear()}</div>
@@ -1207,7 +1202,7 @@ function App(){
     </ModalShell>
   )}
   {widgetModal==='trials_done'&&(
-    <ModalShell title={`⚖️ ${settings.widgets.find(w=>w.id==='trials_done')?.name||'Juicios realizados'}`} onClose={()=>setWidgetModal(null)}>
+    <ModalShell th={TH} title={`⚖️ ${settings.widgets.find(w=>w.id==='trials_done')?.name||'Juicios realizados'}`} onClose={()=>setWidgetModal(null)}>
       <div style={{marginBottom:12,background:dm?'#1A0F2E':'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
         <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
         <div style={{fontSize:11,color:TH.textSub}}>Juicios realizados en {td.getFullYear()}</div>
@@ -1226,7 +1221,7 @@ function App(){
     </ModalShell>
   )}
   {widgetModal==='trials_future'&&(
-    <ModalShell title={`📅 ${settings.widgets.find(w=>w.id==='trials_future')?.name||'Juicios futuros'}`} onClose={()=>setWidgetModal(null)}>
+    <ModalShell th={TH} title={`📅 ${settings.widgets.find(w=>w.id==='trials_future')?.name||'Juicios futuros'}`} onClose={()=>setWidgetModal(null)}>
       <div style={{marginBottom:12,background:dm?'#1A0F2E':'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
         <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
         <div style={{fontSize:11,color:TH.textSub}}>Próximos juicios</div>
@@ -1252,7 +1247,7 @@ function App(){
   )}
 
   {/* ═══ EXPORT / IMPORT ═══ */}
-  {exportModal&&(<ModalShell title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
+  {exportModal&&(<ModalShell th={TH} title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
     {copyOk?<div style={{background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
       :<div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>}
     <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
@@ -1262,7 +1257,7 @@ function App(){
       <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
     </div>
   </ModalShell>)}
-  {importModal&&(<ModalShell title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
+  {importModal&&(<ModalShell th={TH} title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
     <div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega el JSON exportado. Se sobreescribirán todos los datos.</div>
     <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
       style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
