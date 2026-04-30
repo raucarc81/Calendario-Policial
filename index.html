@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>Calendario Policial</title>
+  <title>Calendario de Turnos</title>
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1C1C2E"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
-  <style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#F1F5F9;font-family:system-ui,sans-serif;overscroll-behavior:none;}</style>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:system-ui,sans-serif;overscroll-behavior:none;}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -27,23 +27,18 @@ const MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Sep
 const MNS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TC='#90A4AE',LC='#43A047',FC_WORK='#EF5350',FC_REST='#66BB6A';
 
-/* ── PM Madrid badge SVG ── */
+const LOGO_OPTS=[{id:'pm',l:'PM Madrid',e:null},{id:'p2',l:'Policía 👮',e:'👮'},{id:'p3',l:'Guardia 🛡️',e:'🛡️'},{id:'p4',l:'Bomberos 🚒',e:'🚒'},{id:'p5',l:'Sanitario 🚑',e:'🚑'}];
 const LogoPM=({size=36})=>(
   <svg viewBox="0 0 100 100" width={size} height={size} style={{flexShrink:0}}>
-    {Array.from({length:32},(_,i)=>{
-      const a=(i/32)*Math.PI*2-Math.PI/2,am=((i+.5)/32)*Math.PI*2-Math.PI/2,an=((i+1)/32)*Math.PI*2-Math.PI/2;
+    {Array.from({length:32},(_,i)=>{const a=(i/32)*Math.PI*2-Math.PI/2,am=((i+.5)/32)*Math.PI*2-Math.PI/2,an=((i+1)/32)*Math.PI*2-Math.PI/2;
       return<polygon key={i} points={`${50+36*Math.cos(a)} ${50+36*Math.sin(a)} ${50+49*Math.cos(am)} ${50+49*Math.sin(am)} ${50+36*Math.cos(an)} ${50+36*Math.sin(an)}`} fill="white"/>;
-    })}
-    <circle cx="50" cy="50" r="34" fill="#1C3A8A"/>
-    <circle cx="50" cy="50" r="27" fill="none" stroke="white" strokeWidth="1.2"/>
+    })}<circle cx="50" cy="50" r="34" fill="#1C3A8A"/><circle cx="50" cy="50" r="27" fill="none" stroke="white" strokeWidth="1.2"/>
     <path d="M50 24 L60 28 L60 39 C60 47 55 51 50 53 C45 51 40 47 40 39 L40 28Z" fill="white"/>
     <text x="50" y="69" textAnchor="middle" fontSize="5.8" fontWeight="800" fill="white" letterSpacing=".2">PM MADRID</text>
   </svg>
 );
-const LOGO_OPTS=[{id:'pm',l:'PM Madrid',e:null},{id:'p2',l:'Policía 👮',e:'👮'},{id:'p3',l:'Guardia 🛡️',e:'🛡️'},{id:'p4',l:'Bomberos 🚒',e:'🚒'},{id:'p5',l:'Sanitario 🚑',e:'🚑'}];
 const RenderLogo=({type,size=34})=>type==='pm'?<LogoPM size={size}/>:<span style={{fontSize:size*.88,lineHeight:1}}>{LOGO_OPTS.find(o=>o.id===type)?.e||'👮'}</span>;
 
-/* ── Concepts ── */
 const INIT_CPTS=[
   {id:'HLANT',a:'HLANT',n:'HORAS LIBRES AÑOS ANTERIORES',t:0,u:'H',c:'#FF6B6B',us:0,carryover:'both'},
   {id:'HLIBS',a:'HLIBS',n:'HORAS LIBRES',t:1.4,u:'H',c:'#00BCD4',us:0,ag:true},
@@ -74,22 +69,26 @@ const INIT_CPTS=[
   {id:'CFORM',a:'CFORM',n:'COMP. FORMACIÓN FUERA JORNADA',t:8,u:'d',c:'#F57C00',us:0},
   {id:'PPARE',a:'PPARE',n:'PERMISO PARENTAL ART. 128.2 RD 5/23',t:56,u:'d',c:'#6A1B9A',us:0},
 ];
-
 const INIT_PROF=(name='Principal')=>({name,cpts:INIT_CPTS.map(c=>({...c})),ents:{},mrDays:[],mwDays:[],pat:[]});
-const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',widgets:[
-  {id:'overtime',name:'Horas extra YTD',show:true},
+const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',darkMode:false,widgets:[
+  {id:'overtime',name:'HORAS EXTRAS 💶',show:true},
   {id:'trials_done',name:'Juicios realizados',show:true},
   {id:'trials_future',name:'Juicios futuros',show:true},
 ]};
 const EF={type:'TRABA',hm:'full',hrs:8,
   wd:{ind:'',veh:'',os:'',pe:'',notas:''},
-  eh:{d:'',n:'',fd:'',dieta:'none'},
+  eh:{d:'',n:'',fd:'',dieta:'none',motivo:'',tipo:'cobrar'},
   juicio:{active:false,juzgado:'',fecha:'',horaInicio:'',horaFin:'',termMunicipal:'dentro'}
 };
 
-/* ── UI helpers ── */
-const ProgBar=({pct,color,h=5})=>(
-  <div style={{background:'#E8EAED',borderRadius:4,height:h,overflow:'hidden'}}>
+const getLibrarH=eh=>{
+  if(!eh||eh.tipo!=='librar')return 0;
+  return(parseFloat(eh.d)||0)+(parseFloat(eh.n)||0)+(parseFloat(eh.fd)||0)+(eh.dieta==='media'?.5:eh.dieta==='completa'?1:0);
+};
+
+/* ── Static UI helpers ── */
+const ProgBar=({pct,color,bg='#E8EAED',h=5})=>(
+  <div style={{background:bg,borderRadius:4,height:h,overflow:'hidden'}}>
     <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:color,borderRadius:4,transition:'width .35s'}}/>
   </div>
 );
@@ -98,53 +97,21 @@ const Btn=({children,onClick,color='#1D4ED8',disabled,full,small,outline,style={
     background:disabled?'#BDBDBD':outline?'transparent':color,color:outline?color:'white',
     border:outline?`2px solid ${color}`:'none',borderRadius:24,padding:small?'7px 14px':'11px 22px',
     fontSize:small?11:13,fontWeight:700,cursor:disabled?'not-allowed':'pointer',
-    width:full?'100%':'auto',boxShadow:disabled?'none':`0 2px 8px ${color}44`,transition:'transform .1s',...style}}
+    width:full?'100%':'auto',boxShadow:disabled?'none':`0 2px 8px ${color}44`,...style}}
     onMouseDown={e=>{if(!disabled)e.currentTarget.style.transform='scale(.97)';}}
     onMouseUp={e=>{e.currentTarget.style.transform='scale(1)';}}
   >{children}</button>
-);
-const Card=({children,bg='white',style={}})=>(
-  <div style={{background:bg,borderRadius:16,padding:14,boxShadow:'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
-);
-const STitle=({icon,children})=>(
-  <div style={{fontSize:13,fontWeight:800,color:'#333',marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
-    {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
-  </div>
-);
-const IRow=({label,value,onChange,type='text',ph='',multiline,opts})=>(
-  <div style={{marginBottom:9}}>
-    <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
-    {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
-    :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
-        style={{width:'100%',borderRadius:12,border:'1.5px solid #E0E0E0',padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:'white'}}/>
-    :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
-        style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:'white'}}/>}
-  </div>
 );
 const PieTabIcon=({active,size=22})=>(
   <div style={{width:size,height:size,borderRadius:'50%',flexShrink:0,
     background:active?'conic-gradient(#00ACC1 0% 28%,#F9A825 28% 54%,#4CAF50 54% 76%,#8E24AA 76% 100%)':'conic-gradient(#B0BEC5 0% 28%,#CFD8DC 28% 54%,#B0BEC5 54% 76%,#CFD8DC 76% 100%)'}}/>
 );
-const ModalShell=({children,onClose,title})=>(
-  <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-    onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-    <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'18px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
-      <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 16px'}}/>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:16,fontWeight:800,color:'#1E3A8A'}}>{title}</div>
-        <button onClick={onClose} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
-      </div>
-      {children}
-    </div>
-  </div>
-);
 
-/* ── Pie SVG (consumed-only, always 100%) ── */
-const PieSVG=({data})=>{
+/* ── Pie SVG ── */
+const PieSVG=({data,cardBg})=>{
   const[hov,setHov]=useState(null);
   const total=data.reduce((s,d)=>s+d.value,0);
-  if(!total)return<div style={{textAlign:'center',padding:50,color:'#CBD5E1'}}>Sin datos registrados en lo que va de año.</div>;
+  if(!total)return<div style={{textAlign:'center',padding:50,color:'#CBD5E1'}}>Sin datos registrados aún.</div>;
   const cx=160,cy=160,R=125,ri=50;let ang=-Math.PI/2;
   const slices=data.map((d,i)=>{
     const frac=d.value/total,start=ang,end=ang+frac*2*Math.PI;ang=end;
@@ -168,11 +135,12 @@ const PieSVG=({data})=>{
         const lx=cx+(R+ri)/2*1.1*Math.cos(s.mid),ly=cy+(R+ri)/2*1.1*Math.sin(s.mid);
         return<text key={i} x={lx} y={ly} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="white" style={{pointerEvents:'none'}}>{s.name}</text>;
       })}
+      <circle cx={cx} cy={cy} r={ri-2} fill={cardBg||'white'}/>
       {hd?<>
-        <text x={cx} y={cy-12} textAnchor="middle" fontSize="13" fontWeight="800" fill="#1E293B">{hd.name}</text>
-        <text x={cx} y={cy+6} textAnchor="middle" fontSize="11" fill="#64748B">{hd.total} {hd.unit}</text>
-        <text x={cx} y={cy+24} textAnchor="middle" fontSize="11" fontWeight="700" fill={hd.color}>{(hd.frac*100).toFixed(1)}%</text>
-      </>:<text x={cx} y={cy+5} textAnchor="middle" fontSize="10" fill="#94A3B8">Toca un sector</text>}
+        <text x={cx} y={cy-10} textAnchor="middle" fontSize="12" fontWeight="800" fill="#1E293B">{hd.name}</text>
+        <text x={cx} y={cy+6} textAnchor="middle" fontSize="10" fill="#64748B">{hd.total} {hd.unit}</text>
+        <text x={cx} y={cy+22} textAnchor="middle" fontSize="10" fontWeight="700" fill={hd.color}>{(hd.frac*100).toFixed(1)}%</text>
+      </>:<text x={cx} y={cy+5} textAnchor="middle" fontSize="9" fill="#94A3B8">Toca un sector</text>}
     </svg>
   );
 };
@@ -186,7 +154,6 @@ function App(){
   const[activeProf,setActiveProf]=useState(0);
   const[settings,setSettings]=useState(INIT_SET);
   const[loaded,setLoaded]=useState(false);
-
   const[tab,setTab]=useState('cal');
   const[cv,setCv]=useState('week');
   const[nav,setNav]=useState(new Date(td));
@@ -201,6 +168,8 @@ function App(){
   const[agTarget,setAgTarget]=useState('t');
   const[addCptModal,setAddCptModal]=useState(false);
   const[newCpt,setNewCpt]=useState({a:'',n:'',t:0,u:'d',c:'#607D8B'});
+  const[editCptId,setEditCptId]=useState(null);
+  const[editCptData,setEditCptData]=useState(null);
   const[exportModal,setExportModal]=useState(false);
   const[exportJson,setExportJson]=useState('');
   const[importModal,setImportModal]=useState(false);
@@ -210,10 +179,33 @@ function App(){
   const[settingsModal,setSettingsModal]=useState(false);
   const[widgetModal,setWidgetModal]=useState(null);
   const[newPat,setNewPat]=useState('work');
-  const[form,setForm]=useState(EF);
+  const[form,setForm]=useState({...EF,eh:{...EF.eh},juicio:{...EF.juicio}});
+  const[draggingIdx,setDraggingIdx]=useState(null);
+  const[dragOverIdx,setDragOverIdx]=useState(null);
+  const dragState=useRef({active:false,idx:null,timer:null});
 
-  /* active profile helpers */
-  const prof=profiles[Math.min(activeProf,profiles.length-1)];
+  /* ── theme ── */
+  const dm=settings.darkMode||false;
+  const TH=dm?{
+    pageBg:'#0F172A',cardBg:'#1E293B',cardBg2:'#162032',
+    text:'#E2E8F0',textSub:'#94A3B8',border:'#334155',
+    inputBg:'#0F172A',inputBorder:'#475569',navBg:'#1E293B',navBorder:'#334155',
+    sectionTitle:'#93C5FD',progBg:'#334155',
+    tagBlueBg:'#1E3A5F',tagBlueText:'#93C5FD',tagGreenBg:'#14532D',tagGreenText:'#86EFAC',
+    tagOrangeBg:'#431407',tagOrangeText:'#FED7AA',
+    calEmpty:'#1E293B',calToday:'#1E3A5F',calTodayBorder:'#3B82F6',
+  }:{
+    pageBg:'#F1F5F9',cardBg:'white',cardBg2:'#FAFAFA',
+    text:'#1E293B',textSub:'#64748B',border:'#E5E7EB',
+    inputBg:'white',inputBorder:'#E0E0E0',navBg:'white',navBorder:'#E2E8F0',
+    sectionTitle:'#1E3A8A',progBg:'#E8EAED',
+    tagBlueBg:'#DBEAFE',tagBlueText:'#1D4ED8',tagGreenBg:'#E8F5E9',tagGreenText:'#2E7D32',
+    tagOrangeBg:'#FFE0B2',tagOrangeText:'#E65100',
+    calEmpty:'#FAFAFA',calToday:'#DBEAFE',calTodayBorder:'#1D4ED8',
+  };
+
+  /* ── profile helpers ── */
+  const prof=profiles[Math.min(activeProf,profiles.length-1)]||profiles[0];
   const{cpts,ents,mrDays,mwDays,pat}=prof;
   const upd=fn=>setProfiles(ps=>ps.map((p,i)=>i===activeProf?{...p,...fn(p)}:p));
   const setCpts=fn=>upd(p=>({cpts:typeof fn==='function'?fn(p.cpts):fn}));
@@ -222,20 +214,25 @@ function App(){
   const setMwDays=fn=>upd(p=>({mwDays:typeof fn==='function'?fn(p.mwDays):fn}));
   const setPat=fn=>upd(p=>({pat:typeof fn==='function'?fn(p.pat):fn}));
 
-  /* localStorage */
+  /* ── localStorage ── */
   useEffect(()=>{
-    try{const raw=localStorage.getItem('cal_v4');if(raw){const d=JSON.parse(raw);
+    try{const raw=localStorage.getItem('cal_v5');if(raw){const d=JSON.parse(raw);
       if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
-      if(d.settings)setSettings({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets});
+      if(d.settings)setSettings(s=>({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets}));
+    }else{// migrate v4
+      const raw4=localStorage.getItem('cal_v4');if(raw4){const d=JSON.parse(raw4);
+        if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
+        if(d.settings)setSettings(s=>({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets}));
+      }
     }}catch(e){}setLoaded(true);
   },[]);
   useEffect(()=>{
     if(!loaded)return;
-    try{localStorage.setItem('cal_v4',JSON.stringify({profiles,activeProf,settings}));
+    try{localStorage.setItem('cal_v5',JSON.stringify({profiles,activeProf,settings}));
       setSaveInd('✓');setTimeout(()=>setSaveInd(''),1800);}catch(e){}
   },[profiles,activeProf,settings,loaded]);
 
-  /* export/import */
+  /* ── export/import ── */
   const exportBackup=()=>{
     const data=JSON.stringify({profiles,activeProf,settings,ts:Date.now()},null,2);
     setExportJson(data);setExportModal(true);setCopyOk(false);
@@ -249,18 +246,47 @@ function App(){
     }catch{alert('❌ JSON no válido.');}
   };
 
-  /* concepts */
+  /* ── concepts ── */
   const addConcept=()=>{
     if(!newCpt.a.trim())return;
     setCpts(p=>[...p,{id:'USR_'+Date.now(),...newCpt,t:parseFloat(newCpt.t)||0,us:0}]);
     setNewCpt({a:'',n:'',t:0,u:'d',c:'#607D8B'});setAddCptModal(false);
+  };
+  const saveEditCpt=()=>{
+    if(!editCptData||!editCptId)return;
+    setCpts(p=>p.map(c=>c.id===editCptId?{...c,...editCptData,t:parseFloat(editCptData.t)||0}:c));
+    setEditCptId(null);setEditCptData(null);
   };
   const removeConcept=id=>{
     setCpts(p=>p.filter(c=>c.id!==id));
     setEnts(p=>{const n={...p};Object.keys(n).forEach(k=>{if(n[k].type===id)delete n[k];});return n;});
   };
 
-  /* year reset */
+  /* ── drag reorder ── */
+  const onDragTS=(idx,e)=>{
+    dragState.current.timer=setTimeout(()=>{
+      dragState.current.active=true;dragState.current.idx=idx;
+      if(navigator.vibrate)navigator.vibrate(40);setDraggingIdx(idx);setDragOverIdx(idx);
+    },500);
+  };
+  const onDragTM=e=>{
+    clearTimeout(dragState.current.timer);
+    if(!dragState.current.active)return;
+    e.preventDefault();
+    const touch=e.touches[0];
+    const el=document.elementFromPoint(touch.clientX,touch.clientY);
+    const card=el?.closest('[data-cpt]');
+    if(card){const idx=parseInt(card.dataset.cpt);if(!isNaN(idx))setDragOverIdx(idx);}
+  };
+  const onDragTE=()=>{
+    clearTimeout(dragState.current.timer);
+    if(dragState.current.active&&draggingIdx!=null&&dragOverIdx!=null&&draggingIdx!==dragOverIdx){
+      setCpts(p=>{const arr=[...p];const[item]=arr.splice(draggingIdx,1);arr.splice(dragOverIdx,0,item);return arr;});
+    }
+    dragState.current={active:false,idx:null,timer:null};setDraggingIdx(null);setDragOverIdx(null);
+  };
+
+  /* ── year reset ── */
   const doYearReset=()=>{
     setCpts(prev=>{const g=id=>prev.find(c=>c.id===id);
       return prev.map(c=>{
@@ -273,7 +299,7 @@ function App(){
     });setEnts({});
   };
 
-  /* getDI */
+  /* ── getDI ── */
   const getDI=useCallback(dk=>{
     if(mrDays.includes(dk))return{c:FC_REST,l:'FEST.D',pct:100};
     if(mwDays.includes(dk))return{c:FC_WORK,l:'F.OBL',pct:100};
@@ -287,17 +313,19 @@ function App(){
     return{c:cp.c,l:cp.a+suf,pct};
   },[ents,mrDays,mwDays,cpts]);
 
-  /* day edit */
+  /* ── openDay / saveEntry / delEntry ── */
   const openDay=dk=>{
     const e=ents[dk];
     setForm(e?{type:e.type||'TRABA',hm:e.hm||'full',hrs:e.hrs||8,
-      wd:e.wd||EF.wd,eh:e.eh||EF.eh,
-      juicio:e.juicio?{...EF.juicio,...e.juicio}:{...EF.juicio}}:{...EF,juicio:{...EF.juicio}});
+      wd:{...EF.wd,...(e.wd||{})},
+      eh:{...EF.eh,...(e.eh||{})},
+      juicio:{...EF.juicio,...(e.juicio||{})}}:{...EF,eh:{...EF.eh},juicio:{...EF.juicio}});
     setSelDay(dk);
   };
   const saveEntry=()=>{
     if(!selDay)return;
     const old=ents[selDay],oType=old?.type,nType=form.type;
+    // concept usage
     if(oType&&!['TRABA','LIBRE','FEST_REST'].includes(oType)){
       const oc=cpts.find(c=>c.id===oType);
       if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===oType?{...c,us:Math.max(0,c.us-r)}:c));}
@@ -306,36 +334,38 @@ function App(){
       const nc=cpts.find(c=>c.id===nType);
       if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
     }
+    // HLIBS adjustment for librar hours
+    const oldLib=getLibrarH(old?.eh),newLib=getLibrarH(form.eh);
+    if(oldLib!==newLib){
+      setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-oldLib+newLib).toFixed(2))}:c));
+    }
     setEnts(p=>({...p,[selDay]:{type:form.type,hm:form.hm,hrs:form.hrs,wd:{...form.wd},eh:{...form.eh},juicio:{...form.juicio}}}));
     setSelDay(null);
   };
   const delEntry=()=>{
     if(!selDay)return;
     const old=ents[selDay];
-    if(old&&!['TRABA','LIBRE','FEST_REST'].includes(old.type)){
-      const oc=cpts.find(c=>c.id===old.type);
-      if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===old.type?{...c,us:Math.max(0,c.us-r)}:c));}
+    if(old){
+      if(!['TRABA','LIBRE','FEST_REST'].includes(old.type)){
+        const oc=cpts.find(c=>c.id===old.type);
+        if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===old.type?{...c,us:Math.max(0,c.us-r)}:c));}
+      }
+      const libH=getLibrarH(old.eh);
+      if(libH>0)setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-libH).toFixed(2))}:c));
     }
     setEnts(p=>{const n={...p};delete n[selDay];return n;});setSelDay(null);
   };
-
-  /* pattern */
   const applyPat=()=>{
     if(!pat.length)return;
     const year=td.getFullYear(),ne={...ents};
     let pi=0,cur=new Date(year,0,1),end=new Date(year,11,31);
-    while(cur<=end){
-      const dk=toKey(cur);
+    while(cur<=end){const dk=toKey(cur);
       if(!mrDays.includes(dk)&&!mwDays.includes(dk)){
-        const pt=pat[pi%pat.length];
-        ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0};
-      }
-      pi++;cur=addD(cur,1);
-    }
-    setEnts(ne);setTab('cal');
+        const pt=pat[pi%pat.length];ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0};
+      }pi++;cur=addD(cur,1);}setEnts(ne);setTab('cal');
   };
 
-  /* swipe */
+  /* ── nav ── */
   const touchX=useRef(null);
   const hTS=e=>{touchX.current=e.touches[0].clientX;};
   const hTE=e=>{if(touchX.current==null)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)<50)return;goNav(diff<0?1:-1);};
@@ -350,7 +380,7 @@ function App(){
     return`Año ${nav.getFullYear()}`;
   },[cv,nav]);
 
-  /* computed */
+  /* ── computed ── */
   const consumedPie=useMemo(()=>{
     const counts={};
     Object.entries(ents).filter(([dk])=>fromKey(dk)<=td).forEach(([dk,e])=>{
@@ -371,17 +401,15 @@ function App(){
   const overtimeRows=useMemo(()=>
     Object.entries(ents).filter(([dk,e])=>fromKey(dk)<=td&&e.eh&&(parseFloat(e.eh.d)||parseFloat(e.eh.n)||parseFloat(e.eh.fd)))
       .map(([dk,e])=>({dk,d:parseFloat(e.eh.d)||0,n:parseFloat(e.eh.n)||0,fd:parseFloat(e.eh.fd)||0,
-        dieta:e.eh.dieta||'none',
+        dieta:e.eh.dieta||'none',motivo:e.eh.motivo||'',tipo:e.eh.tipo||'cobrar',
         total:(parseFloat(e.eh.d)||0)+(parseFloat(e.eh.n)||0)+(parseFloat(e.eh.fd)||0)+(e.eh.dieta==='media'?.5:e.eh.dieta==='completa'?1:0)}))
       .sort((a,b)=>a.dk.localeCompare(b.dk))
   ,[ents,td]);
-  const overtimeTotal=useMemo(()=>overtimeRows.reduce((s,x)=>s+x.total,0),[overtimeRows]);
-
+  const overtimeCobrar=useMemo(()=>overtimeRows.filter(r=>r.tipo!=='librar').reduce((s,x)=>s+x.total,0),[overtimeRows]);
   const trialsAll=useMemo(()=>Object.entries(ents).filter(([,e])=>e.juicio?.active)
     .map(([dk,e])=>({dk,dateObj:fromKey(dk),...e.juicio})).sort((a,b)=>a.dk.localeCompare(b.dk)),[ents]);
   const trialsDone=useMemo(()=>trialsAll.filter(t=>t.dateObj<=td),[trialsAll,td]);
   const trialsFuture=useMemo(()=>trialsAll.filter(t=>t.dateObj>td),[trialsAll,td]);
-
   const totalDaysRem=useMemo(()=>cpts.filter(c=>c.u==='d'&&c.t>0&&c.us<c.t).reduce((s,c)=>s+(c.t-c.us),0),[cpts]);
   const totalHoursRem=useMemo(()=>cpts.filter(c=>c.u==='H'&&c.t>0&&c.us<c.t).reduce((s,c)=>s+(c.t-c.us),0),[cpts]);
   const cntAgotado=useMemo(()=>cpts.filter(c=>c.t>0&&c.us>=c.t).length,[cpts]);
@@ -391,12 +419,45 @@ function App(){
     if(sumFilt==='agotado')return cpts.filter(c=>c.t>0&&c.us>=c.t);
     return cpts;
   },[cpts,sumFilt]);
-
   const selCpt=!['TRABA','LIBRE','FEST_REST'].includes(form.type)?cpts.find(c=>c.id===form.type):null;
   const isHourCpt=selCpt?.u==='H';
   const selDateObj=selDay?fromKey(selDay):null;
 
-  /* ── sub-components ── */
+  /* ── shared themed components (inside App for TH access) ── */
+  const Card=({children,bg,style={}})=>(
+    <div style={{background:bg||TH.cardBg,borderRadius:16,padding:14,boxShadow:dm?'0 1px 8px rgba(0,0,0,.3)':'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
+  );
+  const STitle=({icon,children})=>(
+    <div style={{fontSize:13,fontWeight:800,color:TH.sectionTitle,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+      {icon&&<span style={{fontSize:15}}>{icon}</span>}{children}
+    </div>
+  );
+  const IRow=({label,value,onChange,type='text',ph='',multiline,opts})=>(
+    <div style={{marginBottom:9}}>
+      <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
+      {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+          {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
+      :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
+          style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:TH.inputBg,color:TH.text}}/>
+      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
+          style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>}
+    </div>
+  );
+  const ModalShell=({children,onClose,title})=>(
+    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.65)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:TH.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'18px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.25)'}}>
+        <div style={{width:36,height:4,background:TH.border,borderRadius:2,margin:'0 auto 16px'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:16,fontWeight:800,color:TH.sectionTitle}}>{title}</div>
+          <button onClick={onClose} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+
+  /* ── Day Cell ── */
   const DayCell=({dk,weekMode})=>{
     const dateObj=fromKey(dk),num=dateObj.getDate();
     const isT=dk===tk,di=getDI(dk),dow=dateObj.getDay(),isWE=dow===0||dow===6;
@@ -405,21 +466,21 @@ function App(){
     const pct=di?.pct??0,partial=di&&pct<100,full=di&&pct>=100;
     return(
       <div onClick={()=>openDay(dk)}
-        style={{background:full?di.c:isT?'#DBEAFE':'#FAFAFA',border:isT?'2px solid #1D4ED8':'1px solid #E5E7EB',
+        style={{background:full?di.c:isT?TH.calToday:TH.calEmpty,
+          border:isT?`2px solid ${TH.calTodayBorder}`:`1px solid ${TH.border}`,
           borderRadius:10,cursor:'pointer',minHeight:weekMode?92:50,padding:'5px 3px',
           display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',
-          boxShadow:di?'0 2px 8px rgba(0,0,0,.18)':'0 1px 2px rgba(0,0,0,.05)',
-          overflow:'hidden',userSelect:'none',transition:'transform .12s',position:'relative'}}
+          boxShadow:di?'0 2px 8px rgba(0,0,0,.18)':'none',overflow:'hidden',userSelect:'none',position:'relative'}}
         onMouseEnter={e=>e.currentTarget.style.transform='scale(1.05)'}
         onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
       >
         {partial&&<div style={{position:'absolute',bottom:0,left:0,right:0,height:`${pct}%`,background:di.c,opacity:.82,borderRadius:'0 0 8px 8px'}}/>}
-        <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,
-          color:full?'rgba(255,255,255,.93)':partial?'#1E293B':isT?'#1D4ED8':isWE?'#DC2626':'#374151',
-          lineHeight:1.2,position:'relative',zIndex:1}}>{num}</span>
-        {di&&<span style={{fontSize:7,fontWeight:700,color:(full||pct>55)?'rgba(255,255,255,.93)':'#1E293B',
+        <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,position:'relative',zIndex:1,
+          color:full?'rgba(255,255,255,.93)':partial?TH.text:isT?'#1D4ED8':isWE?'#DC2626':TH.text}}>{num}</span>
+        {di&&<span style={{fontSize:7,fontWeight:700,position:'relative',zIndex:1,
+          color:(full||pct>55)?'rgba(255,255,255,.93)':TH.text,
           background:full?'rgba(0,0,0,.2)':`${di.c}bb`,borderRadius:6,padding:'1px 4px',marginTop:2,
-          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',position:'relative',zIndex:1}}>{di.l}</span>}
+          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{di.l}</span>}
         {hasExt&&<div style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#FDE047',zIndex:2}}/>}
         {hasJ&&<div style={{position:'absolute',top:3,left:3,width:5,height:5,borderRadius:'50%',background:'#8B5CF6',zIndex:2}}/>}
       </div>
@@ -428,15 +489,17 @@ function App(){
 
   const WeekView=()=>{const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));return(<div>
     <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
-      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':'#6B7280',padding:'3px 0'}}>{d}</div>)}
+      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
     </div>
     <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>{days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}</div>
   </div>);};
 
-  const MonthView=()=>{const y=nav.getFullYear(),m=nav.getMonth();const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;const cells=[];
-    for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
+  const MonthView=()=>{const y=nav.getFullYear(),m=nav.getMonth();
+    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+    const cells=[];for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);
+    for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
     return(<div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
     </div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div></div>);};
 
   const DayViewFull=()=>{const dk=toKey(nav),di=getDI(dk),e=ents[dk];return(<div>
@@ -446,43 +509,41 @@ function App(){
       {di?<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>
         :<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
     </div>
-    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(
-      <Card><STitle icon="📋">Datos del servicio</STitle>
-        {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
-          <div key={k} style={{marginBottom:5,fontSize:12}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
-        ))}
-      </Card>
-    )}
-    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(
-      <Card bg='#FFFBEB'><STitle icon="⏰">Horas extraordinarias</STitle>
-        {e.eh.d&&<div style={{fontSize:12,marginBottom:3}}>🌤 Diurnas: <b>{e.eh.d}h</b></div>}
-        {e.eh.n&&<div style={{fontSize:12,marginBottom:3}}>🌙 Nocturnas: <b>{e.eh.n}h</b></div>}
-        {e.eh.fd&&<div style={{fontSize:12,marginBottom:3}}>🎉 Festiva/Dom: <b>{e.eh.fd}h</b></div>}
-        {e.eh.dieta!=='none'&&<div style={{fontSize:12}}>🍽 Dieta: <b>{e.eh.dieta==='media'?'Media (+0.5h)':'Completa (+1h)'}</b></div>}
-      </Card>
-    )}
-    {e?.juicio?.active&&(
-      <Card bg='#F3E8FF'><STitle icon="⚖️">Juicio</STitle>
-        {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
-          <div key={k} style={{marginBottom:4,fontSize:12}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
-        ))}
-      </Card>
-    )}
+    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(<Card><STitle icon="📋">Datos del servicio</STitle>
+      {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
+        <div key={k} style={{marginBottom:5,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
+      ))}</Card>)}
+    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(<Card bg={dm?'#2D2000':'#FFFBEB'}><STitle icon="⏰">Horas extraordinarias</STitle>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
+        {e.eh.d&&<span style={{fontSize:12,color:TH.text}}>🌤 <b>{e.eh.d}h</b></span>}
+        {e.eh.n&&<span style={{fontSize:12,color:TH.text}}>🌙 <b>{e.eh.n}h</b></span>}
+        {e.eh.fd&&<span style={{fontSize:12,color:TH.text}}>🎉 <b>{e.eh.fd}h</b></span>}
+        {e.eh.dieta!=='none'&&<span style={{fontSize:12,color:TH.text}}>🍽 <b>{e.eh.dieta==='media'?'Media':'Completa'}</b></span>}
+      </div>
+      {e.eh.motivo&&<div style={{fontSize:11,color:TH.textSub}}>📝 {e.eh.motivo}</div>}
+      <div style={{marginTop:4,display:'inline-block',borderRadius:12,padding:'2px 10px',fontSize:10,fontWeight:700,
+        background:e.eh.tipo==='librar'?'#DCFCE7':'#FEF9C3',color:e.eh.tipo==='librar'?'#15803D':'#92400E'}}>
+        {e.eh.tipo==='librar'?'✓ A librar':'💶 A cobrar'}</div>
+    </Card>)}
+    {e?.juicio?.active&&(<Card bg={dm?'#1A0F2E':'#F3E8FF'}><STitle icon="⚖️">Juicio</STitle>
+      {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
+        <div key={k} style={{marginBottom:4,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
+      ))}</Card>)}
     <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
   </div>);};
 
   const YearView=()=>{const y=nav.getFullYear();return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
     {MNS.map((ms,mi)=>{const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-      return(<div key={mi} style={{background:'white',borderRadius:12,padding:8,boxShadow:'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
+      return(<div key={mi} style={{background:TH.cardBg,borderRadius:12,padding:8,boxShadow:dm?'0 1px 4px rgba(0,0,0,.3)':'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
         onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
         <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
           {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
           {[...Array(ld.getDate())].map((_,i)=>{const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
             return(<div key={i} onClick={e2=>{e2.stopPropagation();setNav(new Date(dk));setCv('day');}}
-              style={{aspectRatio:'1',background:di?di.c:isT?'#BFDBFE':'transparent',borderRadius:2,
+              style={{aspectRatio:'1',background:di?di.c:isT?TH.calToday:'transparent',borderRadius:2,
                 display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
-                border:isT?'1px solid #1D4ED8':'none',color:di?'white':'#6B7280',fontWeight:isT?800:400}}>{i+1}</div>);
+                border:isT?`1px solid ${TH.calTodayBorder}`:'none',color:di?'white':TH.textSub,fontWeight:isT?800:400}}>{i+1}</div>);
           })}
         </div>
       </div>);
@@ -490,12 +551,13 @@ function App(){
   </div>);};
 
   const LegendBar=()=>(
-    <div style={{marginTop:14,background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.06)'}}>
-      <div style={{fontSize:10,fontWeight:700,color:'#6B7280',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda · 🟡 H.Extra · 🟣 Juicio</div>
+    <div style={{marginTop:14,background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.06)'}}>
+      <div style={{fontSize:10,fontWeight:700,color:TH.textSub,marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda · 🟡 H.Extra · 🟣 Juicio</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
         {[{c:TC,l:'TRABA'},{c:LC,l:'LIBRE'},{c:FC_WORK,l:'F.OBL'},{c:FC_REST,l:'FEST.D'},...cpts.map(c=>({c:c.c,l:c.a}))].map((x,i)=>(
           <div key={i} style={{display:'flex',alignItems:'center',gap:3}}>
-            <div style={{width:9,height:9,borderRadius:2,background:x.c,flexShrink:0}}/><span style={{fontSize:8,color:'#6B7280',fontWeight:600}}>{x.l}</span>
+            <div style={{width:9,height:9,borderRadius:2,background:x.c,flexShrink:0}}/>
+            <span style={{fontSize:8,color:TH.textSub,fontWeight:600}}>{x.l}</span>
           </div>
         ))}
       </div>
@@ -504,39 +566,58 @@ function App(){
 
   const CalWidgets=()=>{
     const ws=settings.widgets;
-    const ow=ws.find(w=>w.id==='overtime'),td2=ws.find(w=>w.id==='trials_done'),tf=ws.find(w=>w.id==='trials_future');
-    const vis=[ow?.show&&ow,td2?.show&&td2,tf?.show&&tf].filter(Boolean);
+    const ow=ws.find(w=>w.id==='overtime'),tw=ws.find(w=>w.id==='trials_done'),tf=ws.find(w=>w.id==='trials_future');
+    const vis=[ow?.show&&ow,tw?.show&&tw,tf?.show&&tf].filter(Boolean);
     if(!vis.length)return null;
     return(<div style={{display:'grid',gridTemplateColumns:`repeat(${vis.length},1fr)`,gap:8,marginTop:14}}>
       {ow?.show&&<div onClick={()=>setWidgetModal('overtime')}
-        style={{background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
-        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{ow.name}</div>
-        <div style={{fontSize:19,fontWeight:800,color:'#F59E0B'}}>{overtimeTotal.toFixed(1)}h</div>
+        style={{background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        <div style={{fontSize:7.5,fontWeight:700,color:TH.textSub,marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{ow.name}</div>
+        <div style={{fontSize:18,fontWeight:800,color:'#F59E0B'}}>{overtimeCobrar.toFixed(1)}h</div>
       </div>}
-      {td2?.show&&<div onClick={()=>setWidgetModal('trials_done')}
-        style={{background:'white',borderRadius:14,padding:10,boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
-        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{td2.name}</div>
-        <div style={{fontSize:19,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
+      {tw?.show&&<div onClick={()=>setWidgetModal('trials_done')}
+        style={{background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        <div style={{fontSize:7.5,fontWeight:700,color:TH.textSub,marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{tw.name}</div>
+        <div style={{fontSize:18,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
       </div>}
       {tf?.show&&<div onClick={()=>setWidgetModal('trials_future')}
-        style={{background:trialsFuture.length>0?'#F3E8FF':'white',borderRadius:14,padding:10,
-          boxShadow:'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center',
+        style={{background:trialsFuture.length>0?(dm?'#1A0F2E':'#F3E8FF'):TH.cardBg,borderRadius:14,padding:10,
+          boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center',
           border:trialsFuture.length>0?'2px solid #8B5CF6':'2px solid transparent'}}>
-        <div style={{fontSize:8,fontWeight:700,color:'#64748B',marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{tf.name}</div>
-        <div style={{fontSize:19,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
+        <div style={{fontSize:7.5,fontWeight:700,color:TH.textSub,marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{tf.name}</div>
+        <div style={{fontSize:18,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
         {trialsFuture.length>0&&<div style={{fontSize:8,color:'#8B5CF6',marginTop:1}}>Próx: {trialsFuture[0].dk.slice(5)}</div>}
       </div>}
     </div>);
   };
 
-  if(!loaded)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#F1F5F9',flexDirection:'column',gap:14}}>
+  const ColorPicker=({value,onChange})=>(
+    <div style={{marginBottom:14}}>
+      <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:8,textTransform:'uppercase'}}>Color</label>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:8}}>
+        {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
+          <div key={col} onClick={()=>onChange(col)}
+            style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',flexShrink:0,
+              border:value===col?'3px solid '+TH.text:'3px solid transparent'}}/>
+        ))}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <label style={{fontSize:11,color:TH.textSub,fontWeight:600}}>Paleta completa:</label>
+        <input type="color" value={value} onChange={e=>onChange(e.target.value)}
+          style={{width:44,height:44,borderRadius:12,border:`2px solid ${TH.inputBorder}`,padding:3,cursor:'pointer',flexShrink:0,background:TH.inputBg}}/>
+        <div style={{width:44,height:44,borderRadius:12,background:value,border:`2px solid ${TH.border}`}}/>
+      </div>
+    </div>
+  );
+
+  if(!loaded)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:TH.pageBg,flexDirection:'column',gap:14}}>
     <LogoPM size={60}/><div style={{fontSize:14,color:'#64748B'}}>Cargando…</div></div>);
 
   const hCol=settings.headerColor||'#1C1C2E';
 
-  /* ══════ RENDER ══════ */
+  /* ════ RENDER ════ */
   return(
-  <div style={{fontFamily:'system-ui,sans-serif',background:'#F1F5F9',minHeight:'100vh',width:'100%',paddingBottom:80}}>
+  <div style={{fontFamily:'system-ui,sans-serif',background:TH.pageBg,minHeight:'100vh',width:'100%',paddingBottom:80}}>
 
   {/* HEADER */}
   <div style={{background:hCol,color:'white',padding:'10px 12px',boxShadow:'0 4px 16px rgba(0,0,0,.35)',position:'sticky',top:0,zIndex:20}}>
@@ -545,7 +626,7 @@ function App(){
         <RenderLogo type={settings.logoType} size={34}/>
         <div>
           <div style={{fontSize:13,fontWeight:800,letterSpacing:-.3,lineHeight:1.2,display:'flex',alignItems:'center',gap:6}}>
-            Calendario Policial{saveInd&&<span style={{fontSize:9,color:'#4ADE80',fontWeight:600}}>{saveInd}</span>}
+            Calendario de Turnos{saveInd&&<span style={{fontSize:9,color:'#4ADE80',fontWeight:600}}>{saveInd}</span>}
           </div>
           <div style={{fontSize:9,opacity:.5}}>{prof.name} · {td.getFullYear()}</div>
         </div>
@@ -562,14 +643,14 @@ function App(){
   {/* ═══ CALENDAR ═══ */}
   {tab==='cal'&&(
     <div style={{padding:12}}>
-      <div style={{display:'flex',gap:3,marginBottom:12,background:'#E2E8F0',borderRadius:24,padding:3}}>
+      <div style={{display:'flex',gap:3,marginBottom:12,background:dm?'#334155':'#E2E8F0',borderRadius:24,padding:3}}>
         {[['day','Día'],['week','Semana'],['month','Mes'],['year','Año']].map(([v,l])=>(
-          <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':'#64748B',fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .2s'}}>{l}</button>
+          <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
         ))}
       </div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:'white',borderRadius:24,padding:'3px 6px',boxShadow:'0 1px 5px rgba(0,0,0,.07)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:TH.cardBg,borderRadius:24,padding:'3px 6px',boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.07)'}}>
         <button onClick={()=>goNav(-1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>‹</button>
-        <span style={{fontSize:12,fontWeight:700,color:'#1E293B'}}>{navTitle}</span>
+        <span style={{fontSize:12,fontWeight:700,color:TH.text}}>{navTitle}</span>
         <button onClick={()=>goNav(1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>›</button>
       </div>
       <div style={{textAlign:'right',marginBottom:10}}>
@@ -578,113 +659,122 @@ function App(){
       <div onTouchStart={hTS} onTouchEnd={hTE}>
         {cv==='day'&&<DayViewFull/>}{cv==='week'&&<WeekView/>}{cv==='month'&&<MonthView/>}{cv==='year'&&<YearView/>}
       </div>
-      {cv!=='day'&&<><LegendBar/><CalWidgets/></>}
+      {cv!=='day'&&<LegendBar/>}
+      <CalWidgets/>
     </div>
   )}
 
   {/* ═══ RESUMEN ═══ */}
   {tab==='sum'&&(
     <div style={{padding:12}}>
-      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>📊 Resumen</div>
+      <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:14}}>📊 Resumen</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-        {[
-          {k:'saldo',label:'DÍAS SALDO',val:totalDaysRem.toFixed(0),color:'#16A34A'},
-          {k:'horas',label:'HORAS SALDO',val:totalHoursRem.toFixed(0)+'h',color:'#1D4ED8'},
-          {k:'agotado',label:'AGOTADOS',val:cntAgotado,color:'#DC2626'},
-        ].map(s=>(
+        {[{k:'saldo',l:'DÍAS SALDO',v:totalDaysRem.toFixed(0),col:'#16A34A'},{k:'horas',l:'HORAS SALDO',v:totalHoursRem.toFixed(0)+'h',col:'#1D4ED8'},{k:'agotado',l:'AGOTADOS',v:cntAgotado,col:'#DC2626'}].map(s=>(
           <button key={s.k} onClick={()=>setSumFilt(f=>f===s.k?'all':s.k)}
-            style={{background:sumFilt===s.k?s.color:'white',borderRadius:14,padding:'10px 4px',textAlign:'center',
-              boxShadow:'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.color}`:'2px solid transparent',cursor:'pointer',transition:'all .2s'}}>
-            <div style={{fontSize:18,fontWeight:800,color:sumFilt===s.k?'white':s.color}}>{s.val}</div>
-            <div style={{fontSize:7.5,color:sumFilt===s.k?'rgba(255,255,255,.8)':'#94A3B8',fontWeight:700,marginTop:2,letterSpacing:.3}}>{s.label}</div>
+            style={{background:sumFilt===s.k?s.col:TH.cardBg,borderRadius:14,padding:'10px 4px',textAlign:'center',
+              boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.col}`:`2px solid ${TH.border}`,cursor:'pointer'}}>
+            <div style={{fontSize:18,fontWeight:800,color:sumFilt===s.k?'white':s.col}}>{s.v}</div>
+            <div style={{fontSize:7.5,color:sumFilt===s.k?'rgba(255,255,255,.8)':TH.textSub,fontWeight:700,marginTop:2,letterSpacing:.3}}>{s.l}</div>
           </button>
         ))}
       </div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        {sumFilt!=='all'&&<button onClick={()=>setSumFilt('all')} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:16,padding:'4px 14px',fontSize:11,color:'#64748B',cursor:'pointer'}}>Ver todos</button>}
+      <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:8,marginBottom:12}}>
+        {sumFilt!=='all'&&<button onClick={()=>setSumFilt('all')} style={{background:'none',border:`1px solid ${TH.border}`,borderRadius:16,padding:'4px 14px',fontSize:11,color:TH.textSub,cursor:'pointer'}}>Ver todos</button>}
         <button onClick={()=>setAddCptModal(true)}
-          style={{background:'#1D4ED8',border:'none',borderRadius:14,width:40,height:40,color:'white',fontSize:22,cursor:'pointer',boxShadow:'0 2px 8px #1D4ED844',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:'auto'}}>+</button>
+          style={{background:'#1D4ED8',border:'none',borderRadius:14,width:40,height:40,color:'white',fontSize:22,cursor:'pointer',boxShadow:'0 2px 8px #1D4ED844',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
       </div>
-      {visibleCpts.map(c=>{
-        const isCarryBoth=c.carryover==='both',isCO=c.carryover===true;
-        const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
-        return(
-          <div key={c.id} style={{marginBottom:8,background:isCarryBoth?'#FFF8F0':isCO?'#F0FDF4':'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.07)',borderLeft:`4px solid ${c.c}`}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:2,gap:4}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
-                  <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
-                  {c.ag&&<span style={{fontSize:7,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AUTO</span>}
-                  {isCarryBoth&&<span style={{fontSize:7,background:'#FFE0B2',color:'#E65100',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AÑO ANT.</span>}
-                  {isCO&&<span style={{fontSize:7,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 5px',fontWeight:700}}>TRASPASO</span>}
+      <div style={{touchAction:draggingIdx!=null?'none':'auto'}}>
+        {visibleCpts.map((c,index)=>{
+          const isCarryBoth=c.carryover==='both',isCO=c.carryover===true;
+          const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;
+          const isDragging=draggingIdx===index,isOver=dragOverIdx===index&&draggingIdx!==index;
+          return(
+            <div key={c.id} data-cpt={index}
+              onTouchStart={e=>onDragTS(index,e)} onTouchMove={onDragTM} onTouchEnd={onDragTE}
+              style={{marginBottom:8,
+                background:isCarryBoth?(dm?'#2D1A00':'#FFF8F0'):isCO?(dm?'#0A2A0A':'#F0FDF4'):TH.cardBg,
+                borderRadius:14,padding:11,
+                boxShadow:isDragging?'0 8px 24px rgba(0,0,0,.3)':(dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.07)'),
+                borderLeft:`4px solid ${c.c}`,
+                borderTop:isOver?'3px solid #1D4ED8':undefined,
+                opacity:isDragging?.6:1,
+                transform:isDragging?'scale(1.02)':'scale(1)',
+                transition:'opacity .15s,transform .15s',
+                cursor:'grab'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:4}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,color:TH.textSub,marginRight:2,userSelect:'none'}}>⠿</span>
+                    <span style={{fontSize:12,fontWeight:800,color:TH.text}}>{c.a}</span>
+                    {c.ag&&<span style={{fontSize:7,background:TH.tagBlueBg,color:TH.tagBlueText,borderRadius:8,padding:'1px 5px',fontWeight:700}}>AUTO</span>}
+                    {isCarryBoth&&<span style={{fontSize:7,background:TH.tagOrangeBg,color:TH.tagOrangeText,borderRadius:8,padding:'1px 5px',fontWeight:700}}>AÑO ANT.</span>}
+                    {isCO&&<span style={{fontSize:7,background:TH.tagGreenBg,color:TH.tagGreenText,borderRadius:8,padding:'1px 5px',fontWeight:700}}>TRASPASO</span>}
+                  </div>
+                  <div style={{fontSize:9,color:TH.textSub,marginTop:2}}>{c.n}</div>
                 </div>
-                <div style={{fontSize:9,color:'#94A3B8',marginTop:2}}>{c.n}</div>
+                <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                  <button onClick={()=>{setEditCptId(c.id);setEditCptData({a:c.a,n:c.n,c:c.c,t:c.t,u:c.u});}}
+                    style={{fontSize:9,background:TH.tagBlueBg,color:TH.tagBlueText,border:'none',borderRadius:8,padding:'3px 6px',cursor:'pointer',fontWeight:700}}>✏️</button>
+                  <button onClick={()=>{setAgModal(c.id);setAgTarget('t');setAgAmt(String(c.t));}}
+                    style={{fontSize:9,background:TH.tagGreenBg,color:TH.tagGreenText,border:'none',borderRadius:8,padding:'3px 6px',cursor:'pointer',fontWeight:700}}>T:{c.t}{c.u}</button>
+                  <button onClick={()=>{setAgModal(c.id);setAgTarget('us');setAgAmt(String(c.us));}}
+                    style={{fontSize:9,background:dm?'#3B0000':'#FDECEA',color:'#C62828',border:'none',borderRadius:8,padding:'3px 6px',cursor:'pointer',fontWeight:700}}>U:{c.us}{c.u}</button>
+                  <button onClick={()=>{if(window.confirm(`¿Eliminar "${c.a}"?`))removeConcept(c.id);}}
+                    style={{background:dm?'#3B0000':'#FEF2F2',border:'none',borderRadius:8,padding:'3px 6px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑</button>
+                </div>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                <button onClick={()=>{setAgModal(c.id);setAgTarget('t');setAgAmt(String(c.t));}}
-                  style={{fontSize:9,background:'#DCFCE7',color:'#15803D',border:'none',borderRadius:8,padding:'3px 7px',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>T:{c.t}{c.u}</button>
-                <button onClick={()=>{setAgModal(c.id);setAgTarget('us');setAgAmt(String(c.us));}}
-                  style={{fontSize:9,background:'#FDECEA',color:'#C62828',border:'none',borderRadius:8,padding:'3px 7px',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>U:{c.us}{c.u}</button>
-                <button onClick={()=>{if(window.confirm(`¿Eliminar "${c.a}"?\nSe borrarán los días asociados.`))removeConcept(c.id);}}
-                  style={{background:'#FEF2F2',border:'none',borderRadius:8,padding:'3px 7px',fontSize:12,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑</button>
-              </div>
+              {c.t>0&&<><div style={{marginTop:6}}><ProgBar pct={pct} color={c.c} bg={TH.progBg}/></div>
+                <div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+              {c.t===0&&<div style={{fontSize:10,color:TH.textSub,marginTop:3,fontStyle:'italic'}}>Sin total asignado</div>}
             </div>
-            {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
-            {c.t===0&&<div style={{fontSize:10,color:'#CBD5E1',marginTop:3,fontStyle:'italic'}}>Sin total asignado</div>}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   )}
 
   {/* ═══ PATRÓN ═══ */}
   {tab==='pat'&&(
     <div style={{padding:12}}>
-      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:14}}>🔄 Patrón de trabajo</div>
+      <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:14}}>🔄 Patrón de trabajo</div>
       <Card>
         <STitle icon="🔢">Secuencia de días</STitle>
-        <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:'#F8FAFC',borderRadius:12,marginBottom:12}}>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,minHeight:36,padding:8,background:TH.cardBg2,borderRadius:12,marginBottom:12}}>
           {pat.map((d,i)=>(
             <span key={i} onClick={()=>setPat(p=>p.filter((_,idx)=>idx!==i))}
               style={{background:d==='work'?TC:LC,color:'white',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-              {d==='work'?'T':'L'} ✕
-            </span>
+              {d==='work'?'T':'L'} ✕</span>
           ))}
-          {!pat.length&&<span style={{fontSize:11,color:'#CBD5E1',alignSelf:'center',marginLeft:4}}>Sin patrón</span>}
+          {!pat.length&&<span style={{fontSize:11,color:TH.textSub,alignSelf:'center',marginLeft:4}}>Sin patrón</span>}
         </div>
         <div style={{display:'flex',gap:8}}>
           <select value={newPat} onChange={e=>setNewPat(e.target.value)}
-            style={{flex:1,borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+            style={{flex:1,borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'9px 14px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
             <option value="work">● TRABAJO</option><option value="rest">○ LIBRE</option>
           </select>
           <Btn small onClick={()=>setPat(p=>[...p,newPat])}>+ Añadir</Btn>
         </div>
       </Card>
-      {[
-        {key:'mw',bg:'#FFF5F5',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays},
-        {key:'mr',bg:'#F0FDF4',icon:'🟢',title:'Festivos de obligado descanso',color:FC_REST,days:mrDays,setDays:setMrDays},
-      ].map(({key,bg,icon,title,color,days,setDays})=>(
-        <Card key={key} bg={bg}>
+      {[{key:'mw',icon:'🔴',title:'Festivos obligados a trabajar',color:FC_WORK,days:mwDays,setDays:setMwDays},
+        {key:'mr',icon:'🟢',title:'Festivos de obligado descanso',color:FC_REST,days:mrDays,setDays:setMrDays}].map(({key,icon,title,color,days,setDays})=>(
+        <Card key={key}>
           <STitle icon={icon}>{title}</STitle>
           <Btn full color={color} onClick={()=>{setMpModal(key);setMpSel(new Set(days));setMpNav(new Date(td));}}>
-            📅 Seleccionar fechas en calendario
-          </Btn>
+            📅 Seleccionar fechas en calendario</Btn>
           {days.length>0&&<div style={{marginTop:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:'#64748B',marginBottom:5}}>{days.length} día(s) · toca para eliminar</div>
+            <div style={{fontSize:10,fontWeight:700,color:TH.textSub,marginBottom:5}}>{days.length} día(s) · toca para eliminar</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-              {[...days].sort().map(d=>(
-                <span key={d} onClick={()=>setDays(p=>p.filter(x=>x!==d))}
-                  style={{background:color,color:'white',borderRadius:12,padding:'3px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>{d.slice(5)} ✕</span>
-              ))}
+              {[...days].sort().map(d=>(<span key={d} onClick={()=>setDays(p=>p.filter(x=>x!==d))}
+                style={{background:color,color:'white',borderRadius:12,padding:'3px 10px',fontSize:10,cursor:'pointer',fontWeight:600}}>{d.slice(5)} ✕</span>))}
             </div>
           </div>}
         </Card>
       ))}
       <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
-      <div style={{height:1,background:'#E2E8F0',margin:'16px 0'}}/>
-      <Card bg='#FFF7ED'>
+      <div style={{height:1,background:TH.border,margin:'16px 0'}}/>
+      <Card>
         <STitle icon="🗓">Reinicio de año</STitle>
-        <p style={{fontSize:11,color:'#92400E',marginBottom:10,lineHeight:1.5}}>Traspasos: <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b></p>
+        <p style={{fontSize:11,color:TH.textSub,marginBottom:10,lineHeight:1.5}}>Traspasos: <b>HLANT←HLIBS · ASPAA←ASPAR · CFANT←FEST.24-31+CFEST · HFCNOAÑ←HFCNO</b></p>
         <Btn full color='#C2410C' onClick={()=>{if(window.confirm('¿Confirmar reinicio de año con traspasos?'))doYearReset();}}>🔁 Reinicio de año nuevo</Btn>
       </Card>
     </div>
@@ -693,33 +783,27 @@ function App(){
   {/* ═══ GRÁFICA ═══ */}
   {tab==='chart'&&(
     <div style={{padding:12}}>
-      <div style={{fontSize:17,fontWeight:800,color:'#1E3A8A',marginBottom:6}}>Distribución consumida · {td.getFullYear()}</div>
-      <div style={{fontSize:11,color:'#94A3B8',marginBottom:14}}>Muestra solo los días ya transcurridos y registrados, siempre al 100%.</div>
-      {consumedPie.length===0
-        ?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:'#CBD5E1',marginTop:10}}>Sin datos hasta hoy.</p></div>
-        :<>
-          <Card><PieSVG data={consumedPie}/></Card>
-          <Card>
-            {consumedPie.map((d,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<consumedPie.length-1?'1px solid #F1F5F9':'none'}}>
-                <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'#1E293B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</div>
-                  <div style={{fontSize:9,color:'#94A3B8'}}>{d.full.substring(0,34)}</div>
-                </div>
-                <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:'#475569'}}>{d.total} {d.unit}</div>
+      <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:6}}>Distribución consumida · {td.getFullYear()}</div>
+      <div style={{fontSize:11,color:TH.textSub,marginBottom:14}}>Solo días ya transcurridos y registrados, al 100%.</div>
+      {consumedPie.length===0?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:TH.textSub,marginTop:10}}>Sin datos hasta hoy.</p></div>
+        :<><Card><PieSVG data={consumedPie} cardBg={TH.cardBg}/></Card>
+          <Card>{consumedPie.map((d,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<consumedPie.length-1?`1px solid ${TH.border}`:'none'}}>
+              <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:TH.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</div>
+                <div style={{fontSize:9,color:TH.textSub}}>{d.full.substring(0,34)}</div>
               </div>
-            ))}
-          </Card>
-        </>
-      }
+              <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:TH.textSub}}>{d.total} {d.unit}</div>
+            </div>
+          ))}</Card></>}
     </div>
   )}
 
   {/* BOTTOM NAV */}
-  <div style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'1px solid #E2E8F0',display:'flex',justifyContent:'space-around',padding:'6px 0 8px',boxShadow:'0 -3px 14px rgba(0,0,0,.08)',zIndex:10}}>
+  <div style={{position:'fixed',bottom:0,left:0,right:0,background:TH.navBg,borderTop:`1px solid ${TH.navBorder}`,display:'flex',justifyContent:'space-around',padding:'6px 0 8px',boxShadow:'0 -3px 14px rgba(0,0,0,.08)',zIndex:10}}>
     {[{id:'cal',ico:'📅',l:'Calendario'},{id:'sum',ico:'📊',l:'Resumen'},{id:'pat',ico:'🔄',l:'Patrón'},{id:'chart',ico:null,l:'Gráfica'}].map(t=>(
-      <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 8px',color:tab===t.id?'#1D4ED8':'#94A3B8'}}>
+      <button key={t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 8px',color:tab===t.id?'#1D4ED8':TH.textSub}}>
         {t.ico?<span style={{fontSize:21}}>{t.ico}</span>:<PieTabIcon active={tab===t.id}/>}
         <span style={{fontSize:9,fontWeight:tab===t.id?800:500}}>{t.l}</span>
       </button>
@@ -730,89 +814,107 @@ function App(){
   {selDay&&selDateObj&&(
     <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',zIndex:100,display:'flex',alignItems:'flex-end',justifyContent:'center'}}
       onClick={e=>{if(e.target===e.currentTarget)setSelDay(null);}}>
-      <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)'}}>
-        <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 18px'}}/>
+      <div style={{background:TH.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'93vh',overflowY:'auto',padding:'20px 16px 36px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)'}}>
+        <div style={{width:36,height:4,background:TH.border,borderRadius:2,margin:'0 auto 18px'}}/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
           <div>
-            <div style={{fontSize:18,fontWeight:800,color:'#1E3A8A'}}>{DNF[selDateObj.getDay()]} {selDateObj.getDate()}</div>
-            <div style={{fontSize:12,color:'#94A3B8',marginTop:1}}>{MN[selDateObj.getMonth()]} {selDateObj.getFullYear()}</div>
+            <div style={{fontSize:18,fontWeight:800,color:TH.sectionTitle}}>{DNF[selDateObj.getDay()]} {selDateObj.getDate()}</div>
+            <div style={{fontSize:12,color:TH.textSub,marginTop:1}}>{MN[selDateObj.getMonth()]} {selDateObj.getFullYear()}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {ents[selDay]&&<button onClick={delEntry} style={{background:'#FEF2F2',border:'none',borderRadius:20,padding:'6px 13px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Borrar</button>}
-            <button onClick={()=>setSelDay(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            {ents[selDay]&&<button onClick={delEntry} style={{background:dm?'#3B0000':'#FEF2F2',border:'none',borderRadius:20,padding:'6px 13px',fontSize:11,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Borrar</button>}
+            <button onClick={()=>setSelDay(null)} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
           </div>
         </div>
-        {/* Tipo de día */}
+        {/* Tipo */}
         <div style={{marginBottom:16}}>
-          <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
+          <label style={{fontSize:10,fontWeight:800,color:TH.textSub,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
           <div style={{position:'relative'}}>
             <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,hm:'full',hrs:8}))}
-              style={{width:'100%',borderRadius:24,border:'1.5px solid #E2E8F0',padding:'11px 18px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600,boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
-              <option value="TRABA">● TRABA — Trabajo</option>
-              <option value="LIBRE">○ LIBRE — Día libre</option>
-              {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,30)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
+              style={{width:'100%',borderRadius:24,border:`1.5px solid ${TH.inputBorder}`,padding:'11px 18px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+              <option value="TRABA">● TRABA — Trabajo</option><option value="LIBRE">○ LIBRE — Día libre</option>
+              {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,28)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
             </select>
-            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:'#94A3B8',fontSize:11}}>▼</span>
+            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:TH.textSub,fontSize:11}}>▼</span>
           </div>
         </div>
-        {/* Modo horas */}
-        {isHourCpt&&(
-          <div style={{marginBottom:16}}>
-            <label style={{fontSize:10,fontWeight:800,color:'#64748B',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
-            <div style={{display:'flex',gap:6}}>
-              {[['full','● Completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
-                <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
-                  style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':'#F1F5F9',color:form.hm===v?'white':'#64748B',fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
-              ))}
-            </div>
-            {form.hm!=='full'&&<div style={{marginTop:10}}>
-              <label style={{fontSize:10,color:'#64748B',display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
-              <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
-                style={{width:'100%',borderRadius:20,border:'1.5px solid #E2E8F0',padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit'}}/>
-            </div>}
-          </div>
-        )}
-        {/* Datos servicio */}
-        {form.type==='TRABA'&&(
-          <div style={{background:'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
-            <STitle icon="📋">Datos del servicio</STitle>
-            {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
-              <IRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+        {/* Horas modo */}
+        {isHourCpt&&(<div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:800,color:TH.textSub,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
+          <div style={{display:'flex',gap:6}}>
+            {[['full','● Completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
+              <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
+                style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':TH.cardBg2,color:form.hm===v?'white':TH.textSub,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
             ))}
-            <IRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
           </div>
-        )}
+          {form.hm!=='full'&&<div style={{marginTop:10}}>
+            <label style={{fontSize:10,color:TH.textSub,display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
+            <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
+              style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
+          </div>}
+        </div>)}
+        {/* Datos servicio */}
+        {form.type==='TRABA'&&(<div style={{background:dm?'#0C1A2E':'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
+          <STitle icon="📋">Datos del servicio</STitle>
+          {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
+            <IRow key={k} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+          ))}
+          <IRow label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
+        </div>)}
         {/* Horas extra */}
-        {(form.type==='TRABA'||form.type==='LIBRE')&&(
-          <div style={{background:'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
-            <STitle icon="⏰">Horas extraordinarias</STitle>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
-                <div key={k}>
-                  <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
-                  <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
-                    onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
-                    style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:'white',fontFamily:'inherit'}}/>
-                </div>
-              ))}
-              <div>
-                <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
-                <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
-                  style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
-                  <option value="none">Sin dieta</option><option value="media">Media (+0.5h)</option><option value="completa">Completa (+1h)</option>
-                </select>
+        {(form.type==='TRABA'||form.type==='LIBRE')&&(<div style={{background:dm?'#1A1400':'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
+          <STitle icon="⏰">Horas extraordinarias</STitle>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
+              <div key={k}>
+                <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
+                <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
+                  onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
+                  style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:TH.inputBg,fontFamily:'inherit',color:TH.text}}/>
               </div>
+            ))}
+            <div>
+              <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
+              <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
+                style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+                <option value="none">Sin dieta</option><option value="media">Media (+0.5h)</option><option value="completa">Completa (+1h)</option>
+              </select>
             </div>
           </div>
-        )}
+          {/* Motivo */}
+          <IRow label="Motivo de las horas" ph="Ej: Operación especial, guardia extra…" value={form.eh.motivo||''} onChange={v=>setForm(f=>({...f,eh:{...f.eh,motivo:v}}))}/>
+          {/* Cobrar / Librar */}
+          <div style={{marginTop:4}}>
+            <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:6,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Compensación</label>
+            <div style={{display:'flex',gap:8}}>
+              {[['cobrar','💶 A cobrar','#F59E0B'],['librar','🕐 A librar','#16A34A']].map(([v,l,col])=>(
+                <button key={v} onClick={()=>setForm(f=>({...f,eh:{...f.eh,tipo:v}}))}
+                  style={{flex:1,border:'none',borderRadius:20,padding:'10px 8px',background:form.eh.tipo===v?col:TH.cardBg2,color:form.eh.tipo===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {form.eh.tipo==='librar'&&(parseFloat(form.eh.d)||0)+(parseFloat(form.eh.n)||0)+(parseFloat(form.eh.fd)||0)>0&&(
+              <div style={{marginTop:8,background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'8px 12px',fontSize:11,color:'#15803D',fontWeight:600}}>
+                ✅ Se añadirán {getLibrarH(form.eh).toFixed(1)}h al total de HLIBS
+              </div>
+            )}
+          </div>
+        </div>)}
         {/* Juicio */}
-        <div style={{background:'#F3E8FF',borderRadius:16,padding:14,marginBottom:14}}>
+        <div style={{background:dm?'#1A0F2E':'#F3E8FF',borderRadius:16,padding:14,marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:form.juicio.active?12:0}}>
             <STitle icon="⚖️">Juicio</STitle>
-            <button onClick={()=>setForm(f=>({...f,juicio:{...f.juicio,active:!f.juicio.active}}))}
-              style={{background:form.juicio.active?'#7C3AED':'#DDD6FE',border:'none',borderRadius:20,padding:'5px 14px',fontSize:11,color:form.juicio.active?'white':'#6D28D9',cursor:'pointer',fontWeight:700}}>
-              {form.juicio.active?'✓ Activo':'+ Añadir'}
-            </button>
+            <div style={{display:'flex',gap:6}}>
+              {form.juicio.active&&(
+                <button onClick={()=>setForm(f=>({...f,juicio:{...EF.juicio}}))}
+                  style={{background:dm?'#3B0000':'#FEF2F2',border:'none',borderRadius:16,padding:'5px 10px',fontSize:10,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Quitar</button>
+              )}
+              <button onClick={()=>setForm(f=>({...f,juicio:{...f.juicio,active:!f.juicio.active}}))}
+                style={{background:form.juicio.active?'#7C3AED':(dm?'#2D1A4A':'#DDD6FE'),border:'none',borderRadius:20,padding:'5px 14px',fontSize:11,color:form.juicio.active?'white':'#6D28D9',cursor:'pointer',fontWeight:700}}>
+                {form.juicio.active?'✓ Activo':'+ Añadir'}
+              </button>
+            </div>
           </div>
           {form.juicio.active&&(<>
             <IRow label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
@@ -833,7 +935,7 @@ function App(){
 
   {/* ═══ CONCEPTS PANEL ═══ */}
   {showCP&&(
-    <div style={{position:'fixed',inset:0,background:'white',zIndex:200,overflowY:'auto'}}>
+    <div style={{position:'fixed',inset:0,background:TH.pageBg,zIndex:200,overflowY:'auto'}}>
       <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:16,fontWeight:800}}>📋 Todos los conceptos</div>
@@ -842,18 +944,16 @@ function App(){
       </div>
       <div style={{padding:12}}>
         {cpts.map(c=>{const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;return(
-          <div key={c.id} style={{marginBottom:8,background:'white',borderRadius:14,padding:11,boxShadow:'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
+          <div key={c.id} style={{marginBottom:8,background:TH.cardBg,borderRadius:14,padding:11,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
               <div style={{display:'flex',alignItems:'center',gap:5}}>
                 <div style={{width:10,height:10,borderRadius:2,background:c.c}}/>
-                <span style={{fontSize:12,fontWeight:800,color:'#1E293B'}}>{c.a}</span>
-                {c.ag&&<span style={{fontSize:7,background:'#DBEAFE',color:'#1D4ED8',borderRadius:8,padding:'1px 5px',fontWeight:700}}>AUTO</span>}
-                {c.carryover&&<span style={{fontSize:7,background:'#E8F5E9',color:'#2E7D32',borderRadius:8,padding:'1px 5px',fontWeight:700}}>{c.carryover==='both'?'AÑO ANT.':'TRASPASO'}</span>}
+                <span style={{fontSize:12,fontWeight:800,color:TH.text}}>{c.a}</span>
               </div>
-              <div style={{fontSize:11}}><span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span><span style={{color:'#CBD5E1'}}> / {c.t}{c.u}</span></div>
+              <div style={{fontSize:11}}><span style={{color:'#DC2626',fontWeight:700}}>{c.us}</span><span style={{color:TH.textSub}}> / {c.t}{c.u}</span></div>
             </div>
-            <div style={{fontSize:9.5,color:'#94A3B8',marginBottom:5}}>{c.n}</div>
-            {c.t>0&&<><ProgBar pct={pct} color={c.c}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
+            <div style={{fontSize:9.5,color:TH.textSub,marginBottom:5}}>{c.n}</div>
+            {c.t>0&&<><ProgBar pct={pct} color={c.c} bg={TH.progBg}/><div style={{fontSize:10,fontWeight:700,color:'#16A34A',marginTop:3,textAlign:'right'}}>Pendiente: {pend.toFixed(1)}{c.u}</div></>}
           </div>
         );})}
       </div>
@@ -869,40 +969,40 @@ function App(){
     const confirm=()=>{const arr=[...mpSel];if(isMw)setMwDays([...new Set(arr)]);else setMrDays([...new Set(arr)]);setMpModal(null);};
     return(
       <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.7)',zIndex:400,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-        <div style={{background:'white',borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px'}}>
-          <div style={{width:36,height:4,background:'#E2E8F0',borderRadius:2,margin:'0 auto 14px'}}/>
+        <div style={{background:TH.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px'}}>
+          <div style={{width:36,height:4,background:TH.border,borderRadius:2,margin:'0 auto 14px'}}/>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div><div style={{fontSize:15,fontWeight:800,color:'#1E293B'}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
-              <div style={{fontSize:11,color:'#94A3B8',marginTop:2}}>Toca para seleccionar/deseleccionar</div></div>
-            <button onClick={()=>setMpModal(null)} style={{background:'#F1F5F9',border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:'#64748B'}}>✕</button>
+            <div><div style={{fontSize:15,fontWeight:800,color:TH.text}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
+              <div style={{fontSize:11,color:TH.textSub,marginTop:2}}>Toca para seleccionar/deseleccionar</div></div>
+            <button onClick={()=>setMpModal(null)} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub}}>✕</button>
           </div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F8FAFC',borderRadius:20,padding:'6px 8px',marginBottom:12}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:TH.cardBg2,borderRadius:20,padding:'6px 8px',marginBottom:12}}>
             <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>‹</button>
-            <span style={{fontSize:13,fontWeight:700,color:'#1E293B'}}>{MN[m]} {y}</span>
+            <span style={{fontSize:13,fontWeight:700,color:TH.text}}>{MN[m]} {y}</span>
             <button onClick={()=>setMpNav(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;})} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color,padding:'0 8px',lineHeight:1}}>›</button>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:4}}>
-            {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':'#6B7280'}}>{d}</div>)}
+            {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3,marginBottom:14}}>
             {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
             {[...Array(ld.getDate())].map((_,i)=>{
               const d=new Date(y,m,i+1),dk=toKey(d),sel=mpSel.has(dk),isT=dk===tk,dow=d.getDay(),isWE=dow===0||dow===6;
               return(<div key={i} onClick={()=>toggleDay(dk)}
-                style={{aspectRatio:'1',background:sel?color:isT?'#DBEAFE':'#F8FAFC',borderRadius:10,
+                style={{aspectRatio:'1',background:sel?color:isT?TH.calToday:TH.calEmpty,borderRadius:10,
                   display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',
-                  border:sel?`2px solid ${color}`:isT?'2px solid #1D4ED8':'1.5px solid #E5E7EB',
+                  border:sel?`2px solid ${color}`:isT?`2px solid ${TH.calTodayBorder}`:`1.5px solid ${TH.border}`,
                   boxShadow:sel?`0 2px 8px ${color}55`:'none',userSelect:'none'}}>
-                <span style={{fontSize:12,fontWeight:sel?800:500,color:sel?'white':isT?'#1D4ED8':isWE?'#DC2626':'#374151'}}>{i+1}</span>
+                <span style={{fontSize:12,fontWeight:sel?800:500,color:sel?'white':isT?'#1D4ED8':isWE?'#DC2626':TH.text}}>{i+1}</span>
                 {sel&&<div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,.7)',marginTop:1}}/>}
               </div>);
             })}
           </div>
-          <div style={{background:mpSel.size>0?`${color}18`:'#F8FAFC',borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div><div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:'#94A3B8'}}>{mpSel.size} día(s) seleccionado(s)</div>
-              {mpSel.size>0&&<div style={{fontSize:10,color:'#64748B',marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
+          <div style={{background:mpSel.size>0?`${color}22`:TH.cardBg2,borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div><div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:TH.textSub}}>{mpSel.size} día(s) seleccionado(s)</div>
+              {mpSel.size>0&&<div style={{fontSize:10,color:TH.textSub,marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
             </div>
-            {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:'1px solid #CBD5E1',borderRadius:12,padding:'4px 10px',fontSize:10,color:'#64748B',cursor:'pointer',fontWeight:600}}>Limpiar</button>}
+            {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:`1px solid ${TH.border}`,borderRadius:12,padding:'4px 10px',fontSize:10,color:TH.textSub,cursor:'pointer',fontWeight:600}}>Limpiar</button>}
           </div>
           <Btn full color={color} disabled={mpSel.size===0} onClick={confirm}>✅ Añadir {mpSel.size} día(s)</Btn>
         </div>
@@ -913,9 +1013,9 @@ function App(){
   {/* ═══ AG MODAL ═══ */}
   {agModal&&(()=>{const c=cpts.find(x=>x.id===agModal);if(!c)return null;return(
     <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:'white',borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.22)'}}>
-        <div style={{fontSize:15,fontWeight:800,color:'#1E3A8A',marginBottom:4}}>{c.a} · {agTarget==='us'?'Editar usados':'Editar total'}</div>
-        <div style={{fontSize:11,color:'#94A3B8',marginBottom:16}}>{c.n}</div>
+      <div style={{background:TH.cardBg,borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.25)'}}>
+        <div style={{fontSize:15,fontWeight:800,color:TH.sectionTitle,marginBottom:4}}>{c.a} · {agTarget==='us'?'Editar usados':'Editar total'}</div>
+        <div style={{fontSize:11,color:TH.textSub,marginBottom:16}}>{c.n}</div>
         <IRow label={`Valor en ${c.u}`} type="number" ph="Ej: 8" value={agAmt} onChange={v=>setAgAmt(v)}/>
         <div style={{display:'flex',gap:8,marginTop:14}}>
           <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
@@ -932,34 +1032,19 @@ function App(){
       <IRow label="Nombre completo" ph="Descripción" value={newCpt.n} onChange={v=>setNewCpt(p=>({...p,n:v}))}/>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
         <div>
-          <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
+          <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
           <input type="number" min="0" step="0.5" value={newCpt.t} onChange={e=>setNewCpt(p=>({...p,t:e.target.value}))}
-            style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit'}}/>
+            style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
         </div>
         <div>
-          <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:3,textTransform:'uppercase'}}>Unidad</label>
+          <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Unidad</label>
           <select value={newCpt.u} onChange={e=>setNewCpt(p=>({...p,u:e.target.value}))}
-            style={{width:'100%',borderRadius:20,border:'1.5px solid #E0E0E0',padding:'8px 14px',fontSize:12,background:'white',appearance:'none',fontFamily:'inherit',fontWeight:600}}>
+            style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
             <option value="d">Días (d)</option><option value="H">Horas (H)</option>
           </select>
         </div>
       </div>
-      <div style={{marginBottom:14}}>
-        <label style={{fontSize:10,fontWeight:700,color:'#666',display:'block',marginBottom:8,textTransform:'uppercase'}}>Color · Paleta completa</label>
-        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
-          {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
-            <div key={col} onClick={()=>setNewCpt(p=>({...p,c:col}))}
-              style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',
-                border:newCpt.c===col?'3px solid #1E293B':'3px solid transparent',flexShrink:0}}/>
-          ))}
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <label style={{fontSize:11,color:'#666',fontWeight:600}}>Elegir cualquier color:</label>
-          <input type="color" value={newCpt.c} onChange={e=>setNewCpt(p=>({...p,c:e.target.value}))}
-            style={{width:44,height:44,borderRadius:12,border:'2px solid #E0E0E0',padding:3,cursor:'pointer',flexShrink:0}}/>
-          <div style={{width:44,height:44,borderRadius:12,background:newCpt.c,border:'2px solid #E0E0E0'}}/>
-        </div>
-      </div>
+      <ColorPicker value={newCpt.c} onChange={v=>setNewCpt(p=>({...p,c:v}))}/>
       <div style={{display:'flex',gap:8}}>
         <Btn full outline onClick={()=>setAddCptModal(false)}>Cancelar</Btn>
         <Btn full disabled={!newCpt.a.trim()} onClick={addConcept}>✅ Añadir</Btn>
@@ -967,9 +1052,36 @@ function App(){
     </ModalShell>
   )}
 
+  {/* ═══ EDIT CONCEPT ═══ */}
+  {editCptId&&editCptData&&(
+    <ModalShell title="✏️ Editar concepto" onClose={()=>{setEditCptId(null);setEditCptData(null);}}>
+      <IRow label="Abreviatura (máx. 10)" ph="Ej: VACAN" value={editCptData.a} onChange={v=>setEditCptData(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
+      <IRow label="Nombre completo" ph="Descripción" value={editCptData.n} onChange={v=>setEditCptData(p=>({...p,n:v}))}/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:9}}>
+        <div>
+          <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Total</label>
+          <input type="number" min="0" step="0.5" value={editCptData.t} onChange={e=>setEditCptData(p=>({...p,t:e.target.value}))}
+            style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
+        </div>
+        <div>
+          <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Unidad</label>
+          <select value={editCptData.u} onChange={e=>setEditCptData(p=>({...p,u:e.target.value}))}
+            style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 14px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+            <option value="d">Días (d)</option><option value="H">Horas (H)</option>
+          </select>
+        </div>
+      </div>
+      <ColorPicker value={editCptData.c} onChange={v=>setEditCptData(p=>({...p,c:v}))}/>
+      <div style={{display:'flex',gap:8}}>
+        <Btn full outline onClick={()=>{setEditCptId(null);setEditCptData(null);}}>Cancelar</Btn>
+        <Btn full disabled={!editCptData.a.trim()} onClick={saveEditCpt}>💾 Guardar cambios</Btn>
+      </div>
+    </ModalShell>
+  )}
+
   {/* ═══ SETTINGS ═══ */}
   {settingsModal&&(
-    <div style={{position:'fixed',inset:0,background:'white',zIndex:300,overflowY:'auto'}}>
+    <div style={{position:'fixed',inset:0,background:TH.pageBg,zIndex:300,overflowY:'auto'}}>
       <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:16,fontWeight:800}}>⚙️ Ajustes</div>
@@ -977,20 +1089,34 @@ function App(){
         </div>
       </div>
       <div style={{padding:12}}>
+        {/* Dark mode */}
+        <Card>
+          <STitle icon="🌙">Modo oscuro / claro</STitle>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:TH.text}}>{dm?'Modo oscuro activo':'Modo claro activo'}</div>
+              <div style={{fontSize:11,color:TH.textSub,marginTop:2}}>{dm?'Fondo negro, texto claro':'Fondo claro, texto oscuro'}</div>
+            </div>
+            <button onClick={()=>setSettings(s=>({...s,darkMode:!s.darkMode}))}
+              style={{background:dm?'#1D4ED8':'#E2E8F0',border:'none',borderRadius:24,width:52,height:28,cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+              <div style={{position:'absolute',top:4,left:dm?26:4,width:20,height:20,borderRadius:'50%',background:'white',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+            </button>
+          </div>
+        </Card>
         {/* Header color */}
         <Card>
           <STitle icon="🎨">Color del encabezado</STitle>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <input type="color" value={settings.headerColor||'#1C1C2E'} onChange={e=>setSettings(s=>({...s,headerColor:e.target.value}))}
-              style={{width:56,height:56,borderRadius:14,border:'2px solid #E0E0E0',padding:4,cursor:'pointer',flexShrink:0}}/>
+              style={{width:52,height:52,borderRadius:14,border:`2px solid ${TH.border}`,padding:4,cursor:'pointer',flexShrink:0,background:TH.inputBg}}/>
             <div style={{flex:1}}>
               <div style={{height:40,borderRadius:12,background:settings.headerColor||'#1C1C2E',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <span style={{color:'white',fontSize:11,fontWeight:700}}>Vista previa</span>
               </div>
               <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
-                {['#1C1C2E','#1C3A8A','#14532D','#7F1D1D','#1E3A5F','#3B0764','#1A1A1A','#0F172A'].map(col=>(
+                {['#1C1C2E','#1C3A8A','#14532D','#7F1D1D','#1E3A5F','#3B0764','#1A1A1A','#065F46'].map(col=>(
                   <div key={col} onClick={()=>setSettings(s=>({...s,headerColor:col}))}
-                    style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',border:settings.headerColor===col?'3px solid #1D4ED8':'2px solid #E0E0E0'}}/>
+                    style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',border:settings.headerColor===col?'3px solid #1D4ED8':'2px solid transparent'}}/>
                 ))}
               </div>
             </div>
@@ -1002,10 +1128,10 @@ function App(){
           <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
             {LOGO_OPTS.map(o=>(
               <div key={o.id} onClick={()=>setSettings(s=>({...s,logoType:o.id}))}
-                style={{border:settings.logoType===o.id?'3px solid #1D4ED8':'2px solid #E0E0E0',borderRadius:14,padding:'10px 4px',
-                  textAlign:'center',cursor:'pointer',background:settings.logoType===o.id?'#EFF6FF':'white',transition:'all .15s'}}>
-                <div style={{display:'flex',justifyContent:'center',marginBottom:4}}><RenderLogo type={o.id} size={32}/></div>
-                <div style={{fontSize:8,fontWeight:600,color:'#64748B'}}>{o.l.split(' ')[0]}</div>
+                style={{border:settings.logoType===o.id?'3px solid #1D4ED8':`2px solid ${TH.border}`,borderRadius:14,padding:'10px 4px',
+                  textAlign:'center',cursor:'pointer',background:settings.logoType===o.id?(dm?'#1E3A5F':'#EFF6FF'):TH.cardBg2}}>
+                <div style={{display:'flex',justifyContent:'center',marginBottom:4}}><RenderLogo type={o.id} size={30}/></div>
+                <div style={{fontSize:8,fontWeight:600,color:TH.textSub}}>{o.l.split(' ')[0]}</div>
               </div>
             ))}
           </div>
@@ -1014,52 +1140,43 @@ function App(){
         <Card>
           <STitle icon="👤">Perfiles (máx. 4)</STitle>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-            {Array.from({length:4},(_,i)=>{
-              const p=profiles[i];
-              return(
-                <div key={i}
-                  style={{border:activeProf===i&&p?'2px solid #1D4ED8':'2px solid #E0E0E0',borderRadius:14,padding:12,
-                    background:activeProf===i&&p?'#EFF6FF':'#FAFAFA',cursor:p?'pointer':'default',position:'relative'}}>
-                  {p?(
-                    <>
-                      <div onClick={()=>{setActiveProf(i);setSettingsModal(false);}}
-                        style={{fontSize:12,fontWeight:800,color:activeProf===i?'#1D4ED8':'#1E293B',marginBottom:2}}>{p.name}</div>
-                      <div style={{fontSize:9,color:'#94A3B8'}}>
-                        {Object.keys(p.ents).length} días · {p.cpts.length} conceptos
-                      </div>
-                      {activeProf===i&&<div style={{fontSize:8,color:'#1D4ED8',fontWeight:700,marginTop:2}}>● ACTIVO</div>}
-                      <div style={{display:'flex',gap:4,marginTop:6}}>
-                        <button onClick={()=>{const name=window.prompt('Nombre del perfil:',p.name);if(name)setProfiles(ps=>ps.map((pp,ii)=>ii===i?{...pp,name}:pp));}}
-                          style={{fontSize:9,background:'#DBEAFE',color:'#1D4ED8',border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>✏️</button>
-                        {profiles.length>1&&activeProf!==i&&(
-                          <button onClick={()=>{if(window.confirm(`¿Eliminar perfil "${p.name}"?`)){setProfiles(ps=>ps.filter((_,ii)=>ii!==i));setActiveProf(0);}}}
-                            style={{fontSize:9,background:'#FEF2F2',color:'#B91C1C',border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>🗑</button>
-                        )}
-                      </div>
-                    </>
-                  ):(
-                    <button onClick={()=>{const name=window.prompt('Nombre del nuevo perfil:',`Perfil ${i+1}`);if(name){setProfiles(ps=>{const n=[...ps];n[i]=INIT_PROF(name);return n;});}}}
-                      style={{width:'100%',height:72,background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,color:'#94A3B8'}}>
-                      <span style={{fontSize:24}}>+</span>
-                      <span style={{fontSize:10,fontWeight:600}}>Nuevo perfil</span>
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {Array.from({length:4},(_,i)=>{const p=profiles[i];return(
+              <div key={i} style={{border:activeProf===i&&p?'2px solid #1D4ED8':`2px solid ${TH.border}`,borderRadius:14,padding:12,
+                background:activeProf===i&&p?(dm?'#1E3A5F':'#EFF6FF'):TH.cardBg2,cursor:p?'pointer':'default'}}>
+                {p?(<>
+                  <div onClick={()=>{setActiveProf(i);setSettingsModal(false);}}
+                    style={{fontSize:12,fontWeight:800,color:activeProf===i?'#1D4ED8':TH.text,marginBottom:2}}>{p.name}</div>
+                  <div style={{fontSize:9,color:TH.textSub}}>{Object.keys(p.ents).length} días · {p.cpts.length} conceptos</div>
+                  {activeProf===i&&<div style={{fontSize:8,color:'#1D4ED8',fontWeight:700,marginTop:2}}>● ACTIVO</div>}
+                  <div style={{display:'flex',gap:4,marginTop:6}}>
+                    <button onClick={()=>{const name=window.prompt('Nombre:',p.name);if(name)setProfiles(ps=>ps.map((pp,ii)=>ii===i?{...pp,name}:pp));}}
+                      style={{fontSize:9,background:TH.tagBlueBg,color:TH.tagBlueText,border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>✏️</button>
+                    {profiles.length>1&&activeProf!==i&&(
+                      <button onClick={()=>{if(window.confirm(`¿Eliminar "${p.name}"?`)){setProfiles(ps=>ps.filter((_,ii)=>ii!==i));setActiveProf(0);}}}
+                        style={{fontSize:9,background:dm?'#3B0000':'#FEF2F2',color:'#B91C1C',border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',fontWeight:700}}>🗑</button>
+                    )}
+                  </div>
+                </>):(
+                  <button onClick={()=>{const name=window.prompt('Nombre:',`Perfil ${i+1}`);if(name){setProfiles(ps=>{const n=[...ps];n[i]=INIT_PROF(name);return n;});}}}
+                    style={{width:'100%',height:72,background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,color:TH.textSub}}>
+                    <span style={{fontSize:24}}>+</span><span style={{fontSize:10,fontWeight:600}}>Nuevo perfil</span>
+                  </button>
+                )}
+              </div>
+            );})}
           </div>
         </Card>
         {/* Widgets */}
         <Card>
           <STitle icon="📦">Widgets del calendario</STitle>
           {settings.widgets.map((w,i)=>(
-            <div key={w.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<settings.widgets.length-1?'1px solid #F1F5F9':'none'}}>
+            <div key={w.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<settings.widgets.length-1?`1px solid ${TH.border}`:'none'}}>
               <button onClick={()=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,show:!ww.show}:ww)}))}
-                style={{background:w.show?'#1D4ED8':'#E2E8F0',border:'none',borderRadius:20,width:36,height:20,cursor:'pointer',transition:'all .2s',position:'relative',flexShrink:0}}>
+                style={{background:w.show?'#1D4ED8':TH.progBg,border:'none',borderRadius:20,width:36,height:20,cursor:'pointer',position:'relative',flexShrink:0}}>
                 <div style={{position:'absolute',top:2,left:w.show?18:2,width:16,height:16,borderRadius:'50%',background:'white',transition:'left .2s'}}/>
               </button>
               <input value={w.name} onChange={e=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,name:e.target.value}:ww)}))}
-                style={{flex:1,border:'1px solid #E2E8F0',borderRadius:12,padding:'6px 10px',fontSize:12,fontFamily:'inherit'}}/>
+                style={{flex:1,border:`1px solid ${TH.border}`,borderRadius:12,padding:'6px 10px',fontSize:12,fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
             </div>
           ))}
         </Card>
@@ -1069,21 +1186,21 @@ function App(){
 
   {/* ═══ WIDGET MODALS ═══ */}
   {widgetModal==='overtime'&&(
-    <ModalShell title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'Horas extra'}`} onClose={()=>setWidgetModal(null)}>
-      <div style={{marginBottom:12,background:'#FFFBEB',borderRadius:14,padding:12,textAlign:'center'}}>
-        <div style={{fontSize:28,fontWeight:800,color:'#F59E0B'}}>{overtimeTotal.toFixed(1)}h</div>
-        <div style={{fontSize:11,color:'#92400E'}}>Total horas extra en {td.getFullYear()}</div>
+    <ModalShell title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'HORAS EXTRAS 💶'}`} onClose={()=>setWidgetModal(null)}>
+      <div style={{marginBottom:12,background:dm?'#1A1000':'#FFFBEB',borderRadius:14,padding:12,textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:800,color:'#F59E0B'}}>{overtimeCobrar.toFixed(1)}h</div>
+        <div style={{fontSize:11,color:TH.textSub}}>Horas a cobrar en {td.getFullYear()}</div>
       </div>
-      {overtimeRows.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>Sin horas extra registradas.</p>
-        :overtimeRows.map((r,i)=>(
-          <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F1F5F9',fontSize:12}}>
+      {overtimeRows.filter(r=>r.tipo!=='librar').length===0
+        ?<p style={{textAlign:'center',color:TH.textSub,fontSize:13}}>Sin horas a cobrar registradas.</p>
+        :overtimeRows.filter(r=>r.tipo!=='librar').map((r,i)=>(
+          <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${TH.border}`}}>
             <div>
-              <span style={{fontWeight:700,color:'#1E293B'}}>{r.dk}</span>
-              <span style={{color:'#94A3B8',marginLeft:8}}>
-                {r.d>0&&`☀️${r.d}h `}{r.n>0&&`🌙${r.n}h `}{r.fd>0&&`🎉${r.fd}h `}{r.dieta!=='none'&&`🍽`}
-              </span>
+              <span style={{fontWeight:700,color:TH.text,fontSize:12}}>{r.dk}</span>
+              <span style={{color:TH.textSub,marginLeft:8,fontSize:11}}>{r.d>0&&`☀️${r.d}h `}{r.n>0&&`🌙${r.n}h `}{r.fd>0&&`🎉${r.fd}h `}</span>
+              {r.motivo&&<div style={{fontSize:10,color:TH.textSub}}>📝 {r.motivo}</div>}
             </div>
-            <span style={{fontWeight:800,color:'#F59E0B'}}>{r.total.toFixed(1)}h</span>
+            <span style={{fontWeight:800,color:'#F59E0B',fontSize:12}}>{r.total.toFixed(1)}h</span>
           </div>
         ))
       }
@@ -1091,17 +1208,17 @@ function App(){
   )}
   {widgetModal==='trials_done'&&(
     <ModalShell title={`⚖️ ${settings.widgets.find(w=>w.id==='trials_done')?.name||'Juicios realizados'}`} onClose={()=>setWidgetModal(null)}>
-      <div style={{marginBottom:12,background:'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
+      <div style={{marginBottom:12,background:dm?'#1A0F2E':'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
         <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
-        <div style={{fontSize:11,color:'#6D28D9'}}>Juicios realizados en {td.getFullYear()}</div>
+        <div style={{fontSize:11,color:TH.textSub}}>Juicios realizados en {td.getFullYear()}</div>
       </div>
-      {trialsDone.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>Sin juicios registrados.</p>
+      {trialsDone.length===0?<p style={{textAlign:'center',color:TH.textSub,fontSize:13}}>Sin juicios registrados.</p>
         :trialsDone.map((t,i)=>(
-          <div key={i} style={{padding:'10px 0',borderBottom:'1px solid #F1F5F9'}}>
-            <div style={{fontWeight:800,color:'#1E293B',fontSize:13}}>{t.dk}</div>
-            <div style={{fontSize:11,color:'#64748B',marginTop:3}}>
-              {t.juzgado&&<span>⚖️ {t.juzgado} · </span>}{t.horaInicio&&<span>🕐 {t.horaInicio}{t.horaFin&&`–${t.horaFin}`} · </span>}
-              {t.termMunicipal&&<span>{t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'} del término</span>}
+          <div key={i} style={{padding:'10px 0',borderBottom:`1px solid ${TH.border}`}}>
+            <div style={{fontWeight:800,color:TH.text,fontSize:13}}>{t.dk}</div>
+            <div style={{fontSize:11,color:TH.textSub,marginTop:3}}>
+              {t.juzgado&&<span>⚖️ {t.juzgado} · </span>}{t.horaInicio&&<span>🕐 {t.horaInicio}{t.horaFin&&`–${t.horaFin}`}</span>}
+              {t.termMunicipal&&<span> · {t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'}</span>}
             </div>
           </div>
         ))
@@ -1110,21 +1227,23 @@ function App(){
   )}
   {widgetModal==='trials_future'&&(
     <ModalShell title={`📅 ${settings.widgets.find(w=>w.id==='trials_future')?.name||'Juicios futuros'}`} onClose={()=>setWidgetModal(null)}>
-      <div style={{marginBottom:12,background:'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
+      <div style={{marginBottom:12,background:dm?'#1A0F2E':'#F3E8FF',borderRadius:14,padding:12,textAlign:'center'}}>
         <div style={{fontSize:28,fontWeight:800,color:'#8B5CF6'}}>{trialsFuture.length}</div>
-        <div style={{fontSize:11,color:'#6D28D9'}}>Próximos juicios</div>
+        <div style={{fontSize:11,color:TH.textSub}}>Próximos juicios</div>
       </div>
-      {trialsFuture.length===0?<p style={{textAlign:'center',color:'#CBD5E1',fontSize:13}}>No hay juicios futuros registrados.</p>
+      {trialsFuture.length===0?<p style={{textAlign:'center',color:TH.textSub,fontSize:13}}>No hay juicios futuros.</p>
         :trialsFuture.map((t,i)=>(
-          <div key={i} style={{padding:'10px 12px',borderRadius:12,marginBottom:8,background:i===0?'#F3E8FF':'#FAFAFA',border:i===0?'2px solid #8B5CF6':'1px solid #E5E7EB'}}>
-            <div style={{fontWeight:800,color:i===0?'#6D28D9':'#1E293B',fontSize:13,display:'flex',alignItems:'center',gap:6}}>
-              {i===0&&<span style={{fontSize:10,background:'#8B5CF6',color:'white',borderRadius:8,padding:'1px 6px',fontWeight:700}}>PRÓXIMO</span>}
+          <div key={i} style={{padding:'10px 12px',borderRadius:12,marginBottom:8,
+            background:i===0?(dm?'#1A0F2E':'#F3E8FF'):(dm?TH.cardBg2:'#FAFAFA'),
+            border:i===0?'2px solid #8B5CF6':`1px solid ${TH.border}`}}>
+            <div style={{fontWeight:800,color:i===0?'#8B5CF6':TH.text,fontSize:13,display:'flex',alignItems:'center',gap:6}}>
+              {i===0&&<span style={{fontSize:9,background:'#8B5CF6',color:'white',borderRadius:8,padding:'1px 6px',fontWeight:700}}>PRÓXIMO</span>}
               {t.dk}
             </div>
-            <div style={{fontSize:11,color:'#64748B',marginTop:4}}>
+            <div style={{fontSize:11,color:TH.textSub,marginTop:4}}>
               {t.juzgado&&<div>⚖️ {t.juzgado}</div>}
               {t.horaInicio&&<div>🕐 {t.horaInicio}{t.horaFin&&` – ${t.horaFin}`}</div>}
-              {t.termMunicipal&&<div>{t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'} del término municipal</div>}
+              {t.termMunicipal&&<div>{t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'} del término</div>}
             </div>
           </div>
         ))
@@ -1133,32 +1252,27 @@ function App(){
   )}
 
   {/* ═══ EXPORT / IMPORT ═══ */}
-  {exportModal&&(
-    <ModalShell title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
-      {copyOk?<div style={{background:'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
-        :<div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>}
-      <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
-        style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
-      <div style={{display:'flex',gap:8,marginTop:12}}>
-        <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
-        <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
-      </div>
-    </ModalShell>
-  )}
-  {importModal&&(
-    <ModalShell title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
-      <div style={{background:'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega el JSON exportado. Se sobreescribirán todos los datos.</div>
-      <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
-        style={{width:'100%',borderRadius:12,border:'1.5px solid #E2E8F0',padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:'#F8FAFC',resize:'none'}}/>
-      <div style={{display:'flex',gap:8,marginTop:12}}>
-        <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
-        <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
-      </div>
-    </ModalShell>
-  )}
+  {exportModal&&(<ModalShell title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
+    {copyOk?<div style={{background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
+      :<div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>}
+    <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
+      style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
+    <div style={{display:'flex',gap:8,marginTop:12}}>
+      <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
+      <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
+    </div>
+  </ModalShell>)}
+  {importModal&&(<ModalShell title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
+    <div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega el JSON exportado. Se sobreescribirán todos los datos.</div>
+    <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
+      style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
+    <div style={{display:'flex',gap:8,marginTop:12}}>
+      <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
+      <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
+    </div>
+  </ModalShell>)}
 
-  </div>
-  );
+  </div>);
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
