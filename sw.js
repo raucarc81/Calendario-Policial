@@ -1,4 +1,4 @@
-const CACHE='cal-policial-v7';
+const CACHE='cal-policial-v9';
 const ASSETS=['./','./index.html','./manifest.json','./icon.svg'];
 
 self.addEventListener('install',e=>{
