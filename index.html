@@ -572,7 +572,7 @@ function App(){
     const isT=dk===tk,di=getDI(dk),dow=dateObj.getDay(),isWE=dow===0||dow===6;
     const entry=ents[dk];
     const slots=(entry?.slots||[]).filter(sl=>sl.type&&(parseFloat(sl.hrs)||0)>0);
-    const hasExt=entry?.eh&&(parseFloat(entry.eh.d)||parseFloat(entry.eh.n)||parseFloat(entry.eh.fd));
+    const hasExt=!!(entry?.eh&&((parseFloat(entry.eh.d)||0)>0||(parseFloat(entry.eh.n)||0)>0||(parseFloat(entry.eh.fd)||0)>0));
     const hasJ=entry?.juicio?.active;
     const hasNota=showNotesWidget&&entry?.nota;
     const totalSlotHrs=slots.reduce((s,sl)=>s+(parseFloat(sl.hrs)||0),0);
@@ -1145,8 +1145,9 @@ function App(){
                 </div>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Horas a asignar</label>
-                  <input type="number" min=".5" max="8" step=".5" value={slotForm.hrs}
-                    onChange={e=>setSlotForm(p=>({...p,hrs:parseFloat(e.target.value)||1}))}
+                  <input type="text" inputMode="decimal" value={slotForm.hrs}
+                    onChange={e=>setSlotForm(p=>({...p,hrs:e.target.value}))}
+                    placeholder="Ej: 2 o 2.5"
                     style={{width:'100%',borderRadius:16,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 12px',fontSize:12,
                       boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
                 </div>
@@ -1155,7 +1156,8 @@ function App(){
                     style={{flex:1,background:TH.cardBg2,border:'none',borderRadius:14,padding:'8px',fontSize:11,color:TH.textSub,cursor:'pointer',fontWeight:600}}>Cancelar</button>
                   <button onClick={()=>{
                     const t=slotForm.type||hourCpts[0]?.id||'';
-                    const h=parseFloat(slotForm.hrs)||1;
+                    const h=parseFloat(String(slotForm.hrs).replace(',','.'))||0;
+                    if(!h||h<=0)return;
                     if(!t)return;
                     setForm(f=>({...f,slots:[...f.slots,{type:t,hrs:h}]}));
                     setShowSlotAdd(false);setSlotForm({type:'',hrs:1});
