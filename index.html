@@ -22,7 +22,8 @@ const toKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${S
 const fromKey=dk=>{const[y,m,dd]=dk.split('-').map(Number);return new Date(y,m-1,dd);};
 const addD=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
 const monStart=d=>{const r=new Date(d);const day=r.getDay();r.setDate(r.getDate()-(day===0?6:day-1));return r;};
-const DN=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],DNF=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DN=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const DNF=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MNS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TC='#90A4AE',LC='#43A047',FC_WORK='#EF5350',FC_REST='#66BB6A';
@@ -70,23 +71,36 @@ const INIT_CPTS=[
   {id:'PPARE',a:'PPARE',n:'PERMISO PARENTAL ART. 128.2 RD 5/23',t:56,u:'d',c:'#6A1B9A',us:0},
 ];
 const INIT_PROF=(name='Principal')=>({name,cpts:INIT_CPTS.map(c=>({...c})),ents:{},mrDays:[],mwDays:[],pat:[]});
+
+/* CAMBIO 5: widget notes */
 const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',darkMode:false,widgets:[
   {id:'overtime',name:'HORAS EXTRAS 💶',show:true},
   {id:'trials_done',name:'Juicios realizados',show:true},
   {id:'trials_future',name:'Juicios futuros',show:true},
+  {id:'notes',name:'Notas del día',show:true},
 ]};
-const EF={type:'TRABA',hm:'full',hrs:8,
+
+/* CAMBIO 1: slots | CAMBIO 2: juicio horas/horasTipo | nota general */
+const EF={
+  type:'TRABA',hm:'full',hrs:8,
   wd:{ind:'',veh:'',os:'',pe:'',notas:''},
   eh:{d:'',n:'',fd:'',dieta:'none',motivo:'',tipo:'cobrar'},
-  juicio:{active:false,juzgado:'',fecha:'',horaInicio:'',horaFin:'',termMunicipal:'dentro'}
+  juicio:{active:false,juzgado:'',fecha:'',horaInicio:'',horaFin:'',termMunicipal:'dentro',horas:'',horasTipo:'cobrar'},
+  slots:[],
+  nota:''
 };
 
 const getLibrarH=eh=>{
   if(!eh||eh.tipo!=='librar')return 0;
   return(parseFloat(eh.d)||0)+(parseFloat(eh.n)||0)+(parseFloat(eh.fd)||0)+(eh.dieta==='media'?.5:eh.dieta==='completa'?1:0);
 };
+/* CAMBIO 2: juicio a librar → 6h (dentro) o 7h (fuera) a HLIBS */
+const getLibrarHJuicio=j=>{
+  if(!j?.active||j.horasTipo!=='librar')return 0;
+  return j.termMunicipal==='fuera'?7:6;
+};
 
-/* ── Static UI helpers ── */
+/* ── Static UI ── */
 const ProgBar=({pct,color,bg='#E8EAED',h=5})=>(
   <div style={{background:bg,borderRadius:4,height:h,overflow:'hidden'}}>
     <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:color,borderRadius:4,transition:'width .35s'}}/>
@@ -106,8 +120,6 @@ const PieTabIcon=({active,size=22})=>(
   <div style={{width:size,height:size,borderRadius:'50%',flexShrink:0,
     background:active?'conic-gradient(#00ACC1 0% 28%,#F9A825 28% 54%,#4CAF50 54% 76%,#8E24AA 76% 100%)':'conic-gradient(#B0BEC5 0% 28%,#CFD8DC 28% 54%,#B0BEC5 54% 76%,#CFD8DC 76% 100%)'}}/>
 );
-
-/* ── Pie SVG ── */
 const PieSVG=({data,cardBg})=>{
   const[hov,setHov]=useState(null);
   const total=data.reduce((s,d)=>s+d.value,0);
@@ -119,7 +131,8 @@ const PieSVG=({data,cardBg})=>{
     const large=frac>.5?1:0;
     return{...d,frac,mid:start+(end-start)/2,path:[
       `M${cx+ri*c1[0]} ${cy+ri*c1[1]}`,`L${cx+R*c1[0]} ${cy+R*c1[1]}`,
-      `A${R} ${R} 0 ${large} 1 ${cx+R*c2[0]} ${cy+R*c2[1]}`,`L${cx+ri*c2[0]} ${cy+ri*c2[1]}`,
+      `A${R} ${R} 0 ${large} 1 ${cx+R*c2[0]} ${cy+R*c2[1]}`,
+      `L${cx+ri*c2[0]} ${cy+ri*c2[1]}`,
       `A${ri} ${ri} 0 ${large} 0 ${cx+ri*c1[0]} ${cy+ri*c1[1]}Z`].join(' ')};
   });
   const hd=hov!=null?slices[hov]:null;
@@ -145,10 +158,7 @@ const PieSVG=({data,cardBg})=>{
   );
 };
 
-/* ══════════════════════════════════════════════════════
-   THEMED COMPONENTS — definidos FUERA de App para que
-   React no los desmonte en cada re-render (bug teclado)
-   ══════════════════════════════════════════════════════ */
+/* ══ THEMED COMPONENTS — fuera de App para evitar bug de teclado ══ */
 const Card=({children,bg,style={},th})=>(
   <div style={{background:bg||th.cardBg,borderRadius:16,padding:14,boxShadow:th.dm?'0 1px 8px rgba(0,0,0,.3)':'0 1px 8px rgba(0,0,0,.07)',marginBottom:12,...style}}>{children}</div>
 );
@@ -160,12 +170,15 @@ const STitle=({icon,children,th})=>(
 const IRow=({label,value,onChange,type='text',ph='',multiline,opts,th})=>(
   <div style={{marginBottom:9}}>
     <label style={{fontSize:10,fontWeight:700,color:th.textSub,display:'block',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</label>
-    {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,background:th.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:th.text}}>
+    {opts
+      ?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,background:th.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:th.text}}>
         {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
-    :multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
-        style={{width:'100%',borderRadius:12,border:`1.5px solid ${th.inputBorder}`,padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:th.inputBg,color:th.text}}/>
-    :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
-        style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:th.inputBg,color:th.text}}/>}
+      :multiline
+        ?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={ph} rows={2}
+          style={{width:'100%',borderRadius:12,border:`1.5px solid ${th.inputBorder}`,padding:'8px 12px',fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:th.inputBg,color:th.text}}/>
+        :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={ph}
+          style={{width:'100%',borderRadius:20,border:`1.5px solid ${th.inputBorder}`,padding:'8px 14px',fontSize:12,boxSizing:'border-box',fontFamily:'inherit',background:th.inputBg,color:th.text}}/>
+    }
   </div>
 );
 const ModalShell=({children,onClose,title,th})=>(
@@ -187,8 +200,7 @@ const ColorPicker=({value,onChange,th})=>(
     <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:8}}>
       {['#EF5350','#FF7043','#F9A825','#43A047','#00ACC1','#1D4ED8','#7C3AED','#EC4899','#78909C','#FF6B6B','#00897B','#C0CA33'].map(col=>(
         <div key={col} onClick={()=>onChange(col)}
-          style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',flexShrink:0,
-            border:value===col?'3px solid '+th.text:'3px solid transparent'}}/>
+          style={{width:28,height:28,borderRadius:8,background:col,cursor:'pointer',flexShrink:0,border:value===col?'3px solid '+th.text:'3px solid transparent'}}/>
       ))}
     </div>
     <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -225,25 +237,26 @@ function App(){
   const[newCpt,setNewCpt]=useState({a:'',n:'',t:0,u:'d',c:'#607D8B'});
   const[editCptId,setEditCptId]=useState(null);
   const[editCptData,setEditCptData]=useState(null);
-  const[exportModal,setExportModal]=useState(false);
-  const[exportJson,setExportJson]=useState('');
   const[importModal,setImportModal]=useState(false);
   const[importText,setImportText]=useState('');
-  const[copyOk,setCopyOk]=useState(false);
   const[saveInd,setSaveInd]=useState('');
   const[settingsModal,setSettingsModal]=useState(false);
   const[widgetModal,setWidgetModal]=useState(null);
   const[newPat,setNewPat]=useState('work');
-  const[form,setForm]=useState({...EF,eh:{...EF.eh},juicio:{...EF.juicio}});
+  const[form,setForm]=useState({...EF,eh:{...EF.eh},juicio:{...EF.juicio},slots:[],nota:''});
   const[draggingIdx,setDraggingIdx]=useState(null);
   const[dragOverIdx,setDragOverIdx]=useState(null);
   const dragState=useRef({active:false,idx:null,timer:null});
+  /* CAMBIO 6: EH plegable */
+  const[showEh,setShowEh]=useState(false);
+  /* CAMBIO 1: slot add UI */
+  const[showSlotAdd,setShowSlotAdd]=useState(false);
+  const[slotForm,setSlotForm]=useState({type:'',hrs:1});
 
-  /* ── theme ── */
+  /* theme */
   const dm=settings.darkMode||false;
   const TH=dm?{
-    dm:true,
-    pageBg:'#0F172A',cardBg:'#1E293B',cardBg2:'#162032',
+    dm:true,pageBg:'#0F172A',cardBg:'#1E293B',cardBg2:'#162032',
     text:'#E2E8F0',textSub:'#94A3B8',border:'#334155',
     inputBg:'#0F172A',inputBorder:'#475569',navBg:'#1E293B',navBorder:'#334155',
     sectionTitle:'#93C5FD',progBg:'#334155',
@@ -251,8 +264,7 @@ function App(){
     tagOrangeBg:'#431407',tagOrangeText:'#FED7AA',
     calEmpty:'#1E293B',calToday:'#1E3A5F',calTodayBorder:'#3B82F6',
   }:{
-    dm:false,
-    pageBg:'#F1F5F9',cardBg:'white',cardBg2:'#FAFAFA',
+    dm:false,pageBg:'#F1F5F9',cardBg:'white',cardBg2:'#FAFAFA',
     text:'#1E293B',textSub:'#64748B',border:'#E5E7EB',
     inputBg:'white',inputBorder:'#E0E0E0',navBg:'white',navBorder:'#E2E8F0',
     sectionTitle:'#1E3A8A',progBg:'#E8EAED',
@@ -261,7 +273,6 @@ function App(){
     calEmpty:'#FAFAFA',calToday:'#DBEAFE',calTodayBorder:'#1D4ED8',
   };
 
-  /* ── profile helpers ── */
   const prof=profiles[Math.min(activeProf,profiles.length-1)]||profiles[0];
   const{cpts,ents,mrDays,mwDays,pat}=prof;
   const upd=fn=>setProfiles(ps=>ps.map((p,i)=>i===activeProf?{...p,...fn(p)}:p));
@@ -271,39 +282,67 @@ function App(){
   const setMwDays=fn=>upd(p=>({mwDays:typeof fn==='function'?fn(p.mwDays):fn}));
   const setPat=fn=>upd(p=>({pat:typeof fn==='function'?fn(p.pat):fn}));
 
-  /* ── localStorage ── */
+  /* localStorage */
   useEffect(()=>{
-    try{const raw=localStorage.getItem('cal_v5');if(raw){const d=JSON.parse(raw);
-      if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
-      if(d.settings)setSettings(s=>({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets}));
-    }else{// migrate v4
-      const raw4=localStorage.getItem('cal_v4');if(raw4){const d=JSON.parse(raw4);
-        if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
-        if(d.settings)setSettings(s=>({...INIT_SET,...d.settings,widgets:d.settings.widgets||INIT_SET.widgets}));
+    try{
+      const raw=localStorage.getItem('cal_v5');
+      if(raw){
+        const d=JSON.parse(raw);
+        if(d.profiles)setProfiles(d.profiles);
+        if(d.activeProf!=null)setActiveProf(d.activeProf);
+        if(d.settings){
+          /* merge: añadir widgets nuevos que no existieran */
+          const savedW=d.settings.widgets||[];
+          const mergedW=INIT_SET.widgets.map(dw=>savedW.find(w=>w.id===dw.id)||dw);
+          setSettings({...INIT_SET,...d.settings,widgets:mergedW});
+        }
+      } else {
+        const raw4=localStorage.getItem('cal_v4');
+        if(raw4){
+          const d=JSON.parse(raw4);
+          if(d.profiles)setProfiles(d.profiles);
+          if(d.activeProf!=null)setActiveProf(d.activeProf);
+          if(d.settings){
+            const savedW=d.settings.widgets||[];
+            const mergedW=INIT_SET.widgets.map(dw=>savedW.find(w=>w.id===dw.id)||dw);
+            setSettings({...INIT_SET,...d.settings,widgets:mergedW});
+          }
+        }
       }
-    }}catch(e){}setLoaded(true);
+    }catch(e){}
+    setLoaded(true);
   },[]);
+
   useEffect(()=>{
     if(!loaded)return;
-    try{localStorage.setItem('cal_v5',JSON.stringify({profiles,activeProf,settings}));
-      setSaveInd('✓');setTimeout(()=>setSaveInd(''),1800);}catch(e){}
+    try{
+      localStorage.setItem('cal_v5',JSON.stringify({profiles,activeProf,settings}));
+      setSaveInd('✓');setTimeout(()=>setSaveInd(''),1800);
+    }catch(e){}
   },[profiles,activeProf,settings,loaded]);
 
-  /* ── export/import ── */
+  /* CAMBIO 3: export descarga fichero JSON */
   const exportBackup=()=>{
     const data=JSON.stringify({profiles,activeProf,settings,ts:Date.now()},null,2);
-    setExportJson(data);setExportModal(true);setCopyOk(false);
-    try{navigator.clipboard.writeText(data).then(()=>setCopyOk(true)).catch(()=>{});}catch(e){}
+    const blob=new Blob([data],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`turnos-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(url);
   };
+
   const doImport=()=>{
-    try{const d=JSON.parse(importText);
-      if(d.profiles)setProfiles(d.profiles);if(d.activeProf!=null)setActiveProf(d.activeProf);
+    try{
+      const d=JSON.parse(importText);
+      if(d.profiles)setProfiles(d.profiles);
+      if(d.activeProf!=null)setActiveProf(d.activeProf);
       if(d.settings)setSettings({...INIT_SET,...d.settings});
-      setImportModal(false);setImportText('');alert('✅ Importado.');
+      setImportModal(false);setImportText('');alert('✅ Importado correctamente.');
     }catch{alert('❌ JSON no válido.');}
   };
 
-  /* ── concepts ── */
   const addConcept=()=>{
     if(!newCpt.a.trim())return;
     setCpts(p=>[...p,{id:'USR_'+Date.now(),...newCpt,t:parseFloat(newCpt.t)||0,us:0}]);
@@ -319,7 +358,6 @@ function App(){
     setEnts(p=>{const n={...p};Object.keys(n).forEach(k=>{if(n[k].type===id)delete n[k];});return n;});
   };
 
-  /* ── drag reorder ── */
   const onDragTS=(idx,e)=>{
     dragState.current.timer=setTimeout(()=>{
       dragState.current.active=true;dragState.current.idx=idx;
@@ -343,9 +381,9 @@ function App(){
     dragState.current={active:false,idx:null,timer:null};setDraggingIdx(null);setDragOverIdx(null);
   };
 
-  /* ── year reset ── */
   const doYearReset=()=>{
-    setCpts(prev=>{const g=id=>prev.find(c=>c.id===id);
+    setCpts(prev=>{
+      const g=id=>prev.find(c=>c.id===id);
       return prev.map(c=>{
         if(c.id==='HLANT')return{...c,t:+(c.t+Math.max(0,(g('HLIBS')?.t||0)-(g('HLIBS')?.us||0))).toFixed(1)};
         if(c.id==='ASPAA')return{...c,t:Math.max(0,(g('ASPAR')?.t||0)-(g('ASPAR')?.us||0)),us:0};
@@ -356,7 +394,6 @@ function App(){
     });setEnts({});
   };
 
-  /* ── getDI ── */
   const getDI=useCallback(dk=>{
     if(mrDays.includes(dk))return{c:FC_REST,l:'FEST.D',pct:100};
     if(mwDays.includes(dk))return{c:FC_WORK,l:'F.OBL',pct:100};
@@ -370,64 +407,108 @@ function App(){
     return{c:cp.c,l:cp.a+suf,pct};
   },[ents,mrDays,mwDays,cpts]);
 
-  /* ── openDay / saveEntry / delEntry ── */
   const openDay=dk=>{
     const e=ents[dk];
-    setForm(e?{type:e.type||'TRABA',hm:e.hm||'full',hrs:e.hrs||8,
+    /* CAMBIO 6: auto-expandir EH si ya tiene datos */
+    setShowEh(!!(e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||(e.eh.dieta&&e.eh.dieta!=='none'))));
+    setShowSlotAdd(false);
+    setSlotForm({type:'',hrs:1});
+    setForm(e?{
+      type:e.type||'TRABA',hm:e.hm||'full',hrs:e.hrs||8,
       wd:{...EF.wd,...(e.wd||{})},
       eh:{...EF.eh,...(e.eh||{})},
-      juicio:{...EF.juicio,...(e.juicio||{})}}:{...EF,eh:{...EF.eh},juicio:{...EF.juicio}});
+      juicio:{...EF.juicio,...(e.juicio||{})},
+      slots:[...(e.slots||[])],
+      nota:e.nota||''
+    }:{...EF,eh:{...EF.eh},juicio:{...EF.juicio},slots:[],nota:''});
     setSelDay(dk);
   };
+
   const saveEntry=()=>{
     if(!selDay)return;
     const old=ents[selDay],oType=old?.type,nType=form.type;
+    /* base concept usage */
     if(oType&&!['TRABA','LIBRE','FEST_REST'].includes(oType)){
       const oc=cpts.find(c=>c.id===oType);
-      if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===oType?{...c,us:Math.max(0,c.us-r)}:c));}
+      if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;
+        setCpts(p=>p.map(c=>c.id===oType?{...c,us:Math.max(0,c.us-r)}:c));}
     }
     if(nType&&!['TRABA','LIBRE','FEST_REST'].includes(nType)){
       const nc=cpts.find(c=>c.id===nType);
-      if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
+      if(nc){const r=nc.u==='H'?(form.hm==='full'?8:(parseFloat(form.hrs)||0)):1;
+        setCpts(p=>p.map(c=>c.id===nType?{...c,us:c.us+r}:c));}
     }
+    /* EH librar → HLIBS */
     const oldLib=getLibrarH(old?.eh),newLib=getLibrarH(form.eh);
-    if(oldLib!==newLib){
-      setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-oldLib+newLib).toFixed(2))}:c));
-    }
-    setEnts(p=>({...p,[selDay]:{type:form.type,hm:form.hm,hrs:form.hrs,wd:{...form.wd},eh:{...form.eh},juicio:{...form.juicio}}}));
+    if(oldLib!==newLib)setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-oldLib+newLib).toFixed(2))}:c));
+    /* CAMBIO 1: slots usage */
+    (old?.slots||[]).forEach(sl=>{
+      const h=parseFloat(sl.hrs)||0;
+      if(h>0)setCpts(p=>p.map(x=>x.id===sl.type?{...x,us:Math.max(0,+(x.us-h).toFixed(2))}:x));
+    });
+    (form.slots||[]).forEach(sl=>{
+      const h=parseFloat(sl.hrs)||0;
+      if(h>0)setCpts(p=>p.map(x=>x.id===sl.type?{...x,us:+(x.us+h).toFixed(2)}:x));
+    });
+    /* CAMBIO 2: juicio librar → HLIBS */
+    const oldJLib=getLibrarHJuicio(old?.juicio),newJLib=getLibrarHJuicio(form.juicio);
+    if(oldJLib!==newJLib)setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-oldJLib+newJLib).toFixed(2))}:c));
+    setEnts(p=>({...p,[selDay]:{
+      type:form.type,hm:form.hm,hrs:form.hrs,
+      wd:{...form.wd},eh:{...form.eh},juicio:{...form.juicio},
+      slots:[...(form.slots||[])],nota:form.nota||''
+    }}));
     setSelDay(null);
   };
+
   const delEntry=()=>{
     if(!selDay)return;
     const old=ents[selDay];
     if(old){
       if(!['TRABA','LIBRE','FEST_REST'].includes(old.type)){
         const oc=cpts.find(c=>c.id===old.type);
-        if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;setCpts(p=>p.map(c=>c.id===old.type?{...c,us:Math.max(0,c.us-r)}:c));}
+        if(oc){const r=oc.u==='H'?(old.hm==='full'?8:(parseFloat(old.hrs)||0)):1;
+          setCpts(p=>p.map(c=>c.id===old.type?{...c,us:Math.max(0,c.us-r)}:c));}
       }
       const libH=getLibrarH(old.eh);
       if(libH>0)setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-libH).toFixed(2))}:c));
+      (old.slots||[]).forEach(sl=>{
+        const h=parseFloat(sl.hrs)||0;
+        if(h>0)setCpts(p=>p.map(x=>x.id===sl.type?{...x,us:Math.max(0,+(x.us-h).toFixed(2))}:x));
+      });
+      const jLib=getLibrarHJuicio(old.juicio);
+      if(jLib>0)setCpts(p=>p.map(c=>c.id==='HLIBS'?{...c,t:Math.max(0,+(c.t-jLib).toFixed(2))}:c));
     }
     setEnts(p=>{const n={...p};delete n[selDay];return n;});setSelDay(null);
   };
+
   const applyPat=()=>{
     if(!pat.length)return;
     const year=td.getFullYear(),ne={...ents};
     let pi=0,cur=new Date(year,0,1),end=new Date(year,11,31);
     while(cur<=end){const dk=toKey(cur);
       if(!mrDays.includes(dk)&&!mwDays.includes(dk)){
-        const pt=pat[pi%pat.length];ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0};
-      }pi++;cur=addD(cur,1);}setEnts(ne);setTab('cal');
+        const pt=pat[pi%pat.length];
+        ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0,slots:[],nota:''};
+      }pi++;cur=addD(cur,1);}
+    setEnts(ne);setTab('cal');
   };
 
-  /* ── nav ── */
   const touchX=useRef(null);
   const hTS=e=>{touchX.current=e.touches[0].clientX;};
-  const hTE=e=>{if(touchX.current==null)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)<50)return;goNav(diff<0?1:-1);};
+  const hTE=e=>{
+    if(touchX.current==null)return;
+    const diff=e.changedTouches[0].clientX-touchX.current;
+    touchX.current=null;if(Math.abs(diff)<50)return;goNav(diff<0?1:-1);
+  };
   const goNav=useCallback(dir=>{setNav(prev=>{const d=new Date(prev);
-    if(cv==='day')d.setDate(d.getDate()+dir);else if(cv==='week')d.setDate(d.getDate()+7*dir);
-    else if(cv==='month')d.setMonth(d.getMonth()+dir);else d.setFullYear(d.getFullYear()+dir);return d;
+    if(cv==='day')d.setDate(d.getDate()+dir);
+    else if(cv==='week')d.setDate(d.getDate()+7*dir);
+    else if(cv==='month')d.setMonth(d.getMonth()+dir);
+    else d.setFullYear(d.getFullYear()+dir);
+    return d;
   });},[cv]);
+
   const navTitle=useMemo(()=>{
     if(cv==='day')return`${nav.getDate()} ${MN[nav.getMonth()]} ${nav.getFullYear()}`;
     if(cv==='week'){const ws=monStart(nav),we=addD(ws,6);return`${ws.getDate()} ${MNS[ws.getMonth()]} – ${we.getDate()} ${MNS[we.getMonth()]} ${we.getFullYear()}`;}
@@ -435,13 +516,16 @@ function App(){
     return`Año ${nav.getFullYear()}`;
   },[cv,nav]);
 
-  /* ── computed ── */
+  /* consumedPie — CAMBIO 1: incluye slots */
   const consumedPie=useMemo(()=>{
     const counts={};
     Object.entries(ents).filter(([dk])=>fromKey(dk)<=td).forEach(([dk,e])=>{
       const type=mrDays.includes(dk)||mwDays.includes(dk)?'TRABA':e.type;
-      const val=e.hm!=='full'?(parseFloat(e.hrs)||0)/8:1;
-      counts[type]=(counts[type]||0)+val;
+      const slots=e.slots||[];
+      const totalSlotHrs=slots.reduce((s,sl)=>s+(parseFloat(sl.hrs)||0),0);
+      const baseVal=slots.length>0?(Math.max(0,8-totalSlotHrs)/8):(e.hm!=='full'?(parseFloat(e.hrs)||0)/8:1);
+      if(baseVal>0)counts[type]=(counts[type]||0)+baseVal;
+      slots.forEach(sl=>{const v=(parseFloat(sl.hrs)||0)/8;if(v>0)counts[sl.type]=(counts[sl.type]||0)+v;});
     });
     const r=[];
     Object.entries(counts).forEach(([type,val])=>{
@@ -477,103 +561,216 @@ function App(){
   const selCpt=!['TRABA','LIBRE','FEST_REST'].includes(form.type)?cpts.find(c=>c.id===form.type):null;
   const isHourCpt=selCpt?.u==='H';
   const selDateObj=selDay?fromKey(selDay):null;
+  /* CAMBIO 5: notas widget */
+  const showNotesWidget=useMemo(()=>settings.widgets.find(w=>w.id==='notes')?.show!==false,[settings.widgets]);
+  /* CAMBIO 1: conceptos de horas */
+  const hourCpts=useMemo(()=>cpts.filter(c=>c.u==='H'),[cpts]);
 
-  /* ── Day Cell ── */
+  /* ── CAMBIO 1: DayCell con gradiente multi-color ── */
   const DayCell=({dk,weekMode})=>{
     const dateObj=fromKey(dk),num=dateObj.getDate();
     const isT=dk===tk,di=getDI(dk),dow=dateObj.getDay(),isWE=dow===0||dow===6;
-    const hasExt=ents[dk]?.eh&&(ents[dk].eh.d||ents[dk].eh.n||ents[dk].eh.fd);
-    const hasJ=ents[dk]?.juicio?.active;
-    const pct=di?.pct??0,partial=di&&pct<100,full=di&&pct>=100;
+    const entry=ents[dk];
+    const slots=(entry?.slots||[]).filter(sl=>sl.type&&(parseFloat(sl.hrs)||0)>0);
+    const hasExt=entry?.eh&&(parseFloat(entry.eh.d)||parseFloat(entry.eh.n)||parseFloat(entry.eh.fd));
+    const hasJ=entry?.juicio?.active;
+    const hasNota=showNotesWidget&&entry?.nota;
+    const totalSlotHrs=slots.reduce((s,sl)=>s+(parseFloat(sl.hrs)||0),0);
+
+    let bgStyle={background:isT?TH.calToday:TH.calEmpty};
+    let partialEl=null;
+    let isColorFull=false;
+
+    if(di&&slots.length>0){
+      isColorFull=true;
+      const baseHrs=Math.max(0,8-totalSlotHrs);
+      const segs=[];
+      if(baseHrs>0)segs.push({color:di.c,hrs:baseHrs});
+      slots.forEach(sl=>{const c=cpts.find(x=>x.id===sl.type);if(c)segs.push({color:c.c,hrs:parseFloat(sl.hrs)||0});});
+      const tot=segs.reduce((s,x)=>s+x.hrs,0)||8;
+      let off=0;
+      const gp=segs.map(s=>{const w=(s.hrs/tot)*100;const p=`${s.color} ${off.toFixed(1)}% ${(off+w).toFixed(1)}%`;off+=w;return p;});
+      bgStyle={background:`linear-gradient(to bottom,${gp.join(',')})`};
+    } else if(di){
+      const pct=di.pct??0;
+      if(pct>=100){isColorFull=true;bgStyle={background:di.c};}
+      else if(pct>0){
+        bgStyle={background:isT?TH.calToday:TH.calEmpty};
+        partialEl=<div style={{position:'absolute',bottom:0,left:0,right:0,height:`${pct}%`,background:di.c,opacity:.82,borderRadius:'0 0 8px 8px'}}/>;
+      }
+    }
+
+    const slotLabels=slots.map(sl=>cpts.find(c=>c.id===sl.type)?.a).filter(Boolean);
+    const label=di?(slotLabels.length>0?(weekMode?slotLabels.join('+'):di.l+'+'):di.l):null;
+
     return(
       <div onClick={()=>openDay(dk)}
-        style={{background:full?di.c:isT?TH.calToday:TH.calEmpty,
-          border:isT?`2px solid ${TH.calTodayBorder}`:`1px solid ${TH.border}`,
+        style={{...bgStyle,border:isT?`2px solid ${TH.calTodayBorder}`:`1px solid ${TH.border}`,
           borderRadius:10,cursor:'pointer',minHeight:weekMode?92:50,padding:'5px 3px',
           display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',
           boxShadow:di?'0 2px 8px rgba(0,0,0,.18)':'none',overflow:'hidden',userSelect:'none',position:'relative'}}
         onMouseEnter={e=>e.currentTarget.style.transform='scale(1.05)'}
         onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}
       >
-        {partial&&<div style={{position:'absolute',bottom:0,left:0,right:0,height:`${pct}%`,background:di.c,opacity:.82,borderRadius:'0 0 8px 8px'}}/>}
+        {partialEl}
         <span style={{fontSize:weekMode?13:10,fontWeight:isT?800:500,position:'relative',zIndex:1,
-          color:full?'rgba(255,255,255,.93)':partial?TH.text:isT?'#1D4ED8':isWE?'#DC2626':TH.text}}>{num}</span>
-        {di&&<span style={{fontSize:7,fontWeight:700,position:'relative',zIndex:1,
-          color:(full||pct>55)?'rgba(255,255,255,.93)':TH.text,
-          background:full?'rgba(0,0,0,.2)':`${di.c}bb`,borderRadius:6,padding:'1px 4px',marginTop:2,
-          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{di.l}</span>}
+          color:isColorFull?'rgba(255,255,255,.93)':isT?'#1D4ED8':isWE?'#DC2626':TH.text}}>{num}</span>
+        {label&&<span style={{fontSize:7,fontWeight:700,position:'relative',zIndex:1,
+          color:isColorFull?'rgba(255,255,255,.93)':TH.text,
+          background:isColorFull?'rgba(0,0,0,.2)':`${di.c}bb`,borderRadius:6,padding:'1px 4px',marginTop:2,
+          maxWidth:'90%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>}
         {hasExt&&<div style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#FDE047',zIndex:2}}/>}
         {hasJ&&<div style={{position:'absolute',top:3,left:3,width:5,height:5,borderRadius:'50%',background:'#8B5CF6',zIndex:2}}/>}
+        {hasNota&&<div style={{position:'absolute',bottom:3,right:3,width:5,height:5,borderRadius:'50%',background:'#38BDF8',zIndex:2}}/>}
       </div>
     );
   };
 
-  const WeekView=()=>{const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));return(<div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
-      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
-    </div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>{days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}</div>
-  </div>);};
-
-  const MonthView=()=>{const y=nav.getFullYear(),m=nav.getMonth();
-    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-    const cells=[];for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);
-    for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
-    return(<div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-      {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
-    </div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div></div>);};
-
-  const DayViewFull=()=>{const dk=toKey(nav),di=getDI(dk),e=ents[dk];return(<div>
-    <div style={{background:di?`linear-gradient(140deg,${di.c}ee,${di.c}99)`:'linear-gradient(140deg,#E2E8F0,#CBD5E1)',borderRadius:20,padding:20,marginBottom:14,boxShadow:'0 4px 20px rgba(0,0,0,.12)'}}>
-      <div style={{fontSize:26,fontWeight:800,color:di?'white':'#1E293B'}}>{nav.getDate()} {MN[nav.getMonth()]}</div>
-      <div style={{fontSize:13,color:di?'rgba(255,255,255,.75)':'#64748B',marginTop:2}}>{DNF[nav.getDay()]} · {nav.getFullYear()}</div>
-      {di?<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>
-        :<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
-    </div>
-    {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(<Card th={TH}><STitle th={TH} icon="📋">Datos del servicio</STitle>
-      {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
-        <div key={k} style={{marginBottom:5,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
-      ))}</Card>)}
-    {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(<Card th={TH} bg={dm?'#2D2000':'#FFFBEB'}><STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
-        {e.eh.d&&<span style={{fontSize:12,color:TH.text}}>🌤 <b>{e.eh.d}h</b></span>}
-        {e.eh.n&&<span style={{fontSize:12,color:TH.text}}>🌙 <b>{e.eh.n}h</b></span>}
-        {e.eh.fd&&<span style={{fontSize:12,color:TH.text}}>🎉 <b>{e.eh.fd}h</b></span>}
-        {e.eh.dieta!=='none'&&<span style={{fontSize:12,color:TH.text}}>🍽 <b>{e.eh.dieta==='media'?'Media':'Completa'}</b></span>}
+  /* CAMBIO 5: WeekView con fila de notas */
+  const WeekView=()=>{
+    const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));
+    const hasAnyNota=showNotesWidget&&days.some(d=>ents[toKey(d)]?.nota);
+    return(<div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
+        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
       </div>
-      {e.eh.motivo&&<div style={{fontSize:11,color:TH.textSub}}>📝 {e.eh.motivo}</div>}
-      <div style={{marginTop:4,display:'inline-block',borderRadius:12,padding:'2px 10px',fontSize:10,fontWeight:700,
-        background:e.eh.tipo==='librar'?'#DCFCE7':'#FEF9C3',color:e.eh.tipo==='librar'?'#15803D':'#92400E'}}>
-        {e.eh.tipo==='librar'?'✓ A librar':'💶 A cobrar'}</div>
-    </Card>)}
-    {e?.juicio?.active&&(<Card th={TH} bg={dm?'#1A0F2E':'#F3E8FF'}><STitle th={TH} icon="⚖️">Juicio</STitle>
-      {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
-        <div key={k} style={{marginBottom:4,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
-      ))}</Card>)}
-    <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
-  </div>);};
-
-  const YearView=()=>{const y=nav.getFullYear();return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-    {MNS.map((ms,mi)=>{const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
-      return(<div key={mi} style={{background:TH.cardBg,borderRadius:12,padding:8,boxShadow:dm?'0 1px 4px rgba(0,0,0,.3)':'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
-        onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
-        <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
-          {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
-          {[...Array(ld.getDate())].map((_,i)=>{const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
-            return(<div key={i} onClick={e2=>{e2.stopPropagation();setNav(new Date(dk));setCv('day');}}
-              style={{aspectRatio:'1',background:di?di.c:isT?TH.calToday:'transparent',borderRadius:2,
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
-                border:isT?`1px solid ${TH.calTodayBorder}`:'none',color:di?'white':TH.textSub,fontWeight:isT?800:400}}>{i+1}</div>);
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+        {days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}
+      </div>
+      {hasAnyNota&&(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginTop:5}}>
+          {days.map(d=>{
+            const dk=toKey(d),nota=ents[dk]?.nota;
+            return(<div key={dk} style={{
+              fontSize:8,color:TH.text,
+              background:nota?(dm?'#1E293B':'#F0F4F8'):'transparent',
+              borderRadius:7,padding:nota?'4px 5px':0,
+              lineHeight:1.35,border:nota?`1px solid ${TH.border}`:'none',
+              wordBreak:'break-word'
+            }}>{nota||''}</div>);
           })}
         </div>
-      </div>);
-    })}
-  </div>);};
+      )}
+    </div>);
+  };
+
+  const MonthView=()=>{
+    const y=nav.getFullYear(),m=nav.getMonth();
+    const fd=new Date(y,m,1),ld=new Date(y,m+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+    const cells=[];
+    for(let i=0;i<off;i++)cells.push(<div key={`e${i}`}/>);
+    for(let i=1;i<=ld.getDate();i++){const d=new Date(y,m,i);cells.push(<DayCell key={toKey(d)} dk={toKey(d)}/>);}
+    return(<div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+        {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>{cells}</div>
+    </div>);
+  };
+
+  /* CAMBIO 5: DayViewFull con nota | CAMBIO 2: juicio horas | CAMBIO 1: slots */
+  const DayViewFull=()=>{
+    const dk=toKey(nav),di=getDI(dk),e=ents[dk];
+    const slots=(e?.slots||[]).filter(sl=>sl.type&&(parseFloat(sl.hrs)||0)>0);
+    return(<div>
+      <div style={{background:di?`linear-gradient(140deg,${di.c}ee,${di.c}99)`:'linear-gradient(140deg,#E2E8F0,#CBD5E1)',
+        borderRadius:20,padding:20,marginBottom:14,boxShadow:'0 4px 20px rgba(0,0,0,.12)'}}>
+        <div style={{fontSize:26,fontWeight:800,color:di?'white':'#1E293B'}}>{nav.getDate()} {MN[nav.getMonth()]}</div>
+        <div style={{fontSize:13,color:di?'rgba(255,255,255,.75)':'#64748B',marginTop:2}}>{DNF[nav.getDay()]} · {nav.getFullYear()}</div>
+        {di?<div style={{marginTop:10,display:'inline-block',background:'rgba(0,0,0,.18)',borderRadius:12,padding:'4px 14px',fontSize:13,fontWeight:700,color:'white'}}>{di.l}</div>
+          :<div style={{marginTop:8,fontSize:12,color:'#94A3B8'}}>Sin registro. Pulsa "Editar".</div>}
+      </div>
+      {e?.type==='TRABA'&&e.wd&&Object.values(e.wd).some(v=>v)&&(
+        <Card th={TH}><STitle th={TH} icon="📋">Datos del servicio</STitle>
+          {[['Indicativo',e.wd.ind],['Vehículo',e.wd.veh],['Orden servicio',e.wd.os],['Puesto evento',e.wd.pe],['Notas',e.wd.notas]].filter(([,v])=>v).map(([k,v])=>(
+            <div key={k} style={{marginBottom:5,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#475569'}}>{k}: </span>{v}</div>
+          ))}
+        </Card>
+      )}
+      {/* CAMBIO 1: slots */}
+      {slots.length>0&&(
+        <Card th={TH}><STitle th={TH} icon="🧩">Conceptos adicionales</STitle>
+          {slots.map((sl,i)=>{const c=cpts.find(x=>x.id===sl.type);return c?(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+              <div style={{width:10,height:10,borderRadius:2,background:c.c,flexShrink:0}}/>
+              <span style={{fontSize:12,fontWeight:700,color:TH.text}}>{c.a}</span>
+              <span style={{fontSize:12,color:TH.textSub}}>— {sl.hrs}h</span>
+            </div>
+          ):null;})}
+        </Card>
+      )}
+      {e?.eh&&(e.eh.d||e.eh.n||e.eh.fd||e.eh.dieta!=='none')&&(
+        <Card th={TH} bg={dm?'#2D2000':'#FFFBEB'}><STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
+            {e.eh.d&&<span style={{fontSize:12,color:TH.text}}>🌤 <b>{e.eh.d}h</b></span>}
+            {e.eh.n&&<span style={{fontSize:12,color:TH.text}}>🌙 <b>{e.eh.n}h</b></span>}
+            {e.eh.fd&&<span style={{fontSize:12,color:TH.text}}>🎉 <b>{e.eh.fd}h</b></span>}
+            {e.eh.dieta!=='none'&&<span style={{fontSize:12,color:TH.text}}>🍽 <b>{e.eh.dieta==='media'?'Media':'Completa'}</b></span>}
+          </div>
+          {e.eh.motivo&&<div style={{fontSize:11,color:TH.textSub}}>📝 {e.eh.motivo}</div>}
+          <div style={{marginTop:4,display:'inline-block',borderRadius:12,padding:'2px 10px',fontSize:10,fontWeight:700,
+            background:e.eh.tipo==='librar'?'#DCFCE7':'#FEF9C3',color:e.eh.tipo==='librar'?'#15803D':'#92400E'}}>
+            {e.eh.tipo==='librar'?'✓ A librar':'💶 A cobrar'}</div>
+        </Card>
+      )}
+      {e?.juicio?.active&&(
+        <Card th={TH} bg={dm?'#1A0F2E':'#F3E8FF'}><STitle th={TH} icon="⚖️">Juicio</STitle>
+          {[['Juzgado',e.juicio.juzgado],['Fecha',e.juicio.fecha],['Inicio',e.juicio.horaInicio],['Fin',e.juicio.horaFin],['Ámbito',e.juicio.termMunicipal]].filter(([,v])=>v).map(([k,v])=>(
+            <div key={k} style={{marginBottom:4,fontSize:12,color:TH.text}}><span style={{fontWeight:700,color:'#6D28D9'}}>{k}: </span>{v}</div>
+          ))}
+          {/* CAMBIO 2: horas juicio en day view */}
+          {e.juicio.horas&&(
+            <div style={{marginTop:6,background:dm?'#2D1A4A':'#EDE9FE',borderRadius:10,padding:'6px 10px',fontSize:11}}>
+              <span style={{fontWeight:700,color:'#6D28D9'}}>⏱ {e.juicio.horas}h</span>
+              <span style={{color:TH.textSub,marginLeft:6}}>
+                {e.juicio.horasTipo==='librar'
+                  ?`✓ A librar → +${getLibrarHJuicio(e.juicio)}h HLIBS (${e.juicio.termMunicipal==='fuera'?'fuera':'dentro'} del término)`
+                  :'💶 A cobrar'}
+              </span>
+            </div>
+          )}
+        </Card>
+      )}
+      {/* CAMBIO 5: nota del día */}
+      {showNotesWidget&&e?.nota&&(
+        <Card th={TH} bg={dm?'#0F2030':'#EFF6FF'}><STitle th={TH} icon="📝">Nota</STitle>
+          <div style={{fontSize:12,color:TH.text,lineHeight:1.55,whiteSpace:'pre-wrap'}}>{e.nota}</div>
+        </Card>
+      )}
+      <Btn full onClick={()=>openDay(dk)}>✏️ Editar este día</Btn>
+    </div>);
+  };
+
+  const YearView=()=>{
+    const y=nav.getFullYear();
+    return(<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+      {MNS.map((ms,mi)=>{
+        const fd=new Date(y,mi,1),ld=new Date(y,mi+1,0),off=fd.getDay()===0?6:fd.getDay()-1;
+        return(<div key={mi} style={{background:TH.cardBg,borderRadius:12,padding:8,
+          boxShadow:dm?'0 1px 4px rgba(0,0,0,.3)':'0 1px 4px rgba(0,0,0,.07)',cursor:'pointer'}}
+          onClick={()=>{setNav(new Date(y,mi,1));setCv('month');}}>
+          <div style={{fontSize:10,fontWeight:800,textAlign:'center',marginBottom:4,color:'#1D4ED8'}}>{ms}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1}}>
+            {[...Array(off)].map((_,i)=><div key={`e${i}`}/>)}
+            {[...Array(ld.getDate())].map((_,i)=>{
+              const d=new Date(y,mi,i+1),dk=toKey(d),di=getDI(dk),isT=dk===tk;
+              return(<div key={i} onClick={e2=>{e2.stopPropagation();setNav(new Date(dk));setCv('day');}}
+                style={{aspectRatio:'1',background:di?di.c:isT?TH.calToday:'transparent',borderRadius:2,
+                  display:'flex',alignItems:'center',justifyContent:'center',fontSize:5.5,cursor:'pointer',
+                  border:isT?`1px solid ${TH.calTodayBorder}`:'none',
+                  color:di?'white':TH.textSub,fontWeight:isT?800:400}}>{i+1}</div>);
+            })}
+          </div>
+        </div>);
+      })}
+    </div>);
+  };
 
   const LegendBar=()=>(
-    <div style={{marginTop:14,background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.06)'}}>
-      <div style={{fontSize:10,fontWeight:700,color:TH.textSub,marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Leyenda · 🟡 H.Extra · 🟣 Juicio</div>
+    <div style={{marginTop:14,background:TH.cardBg,borderRadius:14,padding:10,
+      boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.06)'}}>
+      <div style={{fontSize:10,fontWeight:700,color:TH.textSub,marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>
+        Leyenda · 🟡 H.Extra · 🟣 Juicio · 🔵 Nota</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
         {[{c:TC,l:'TRABA'},{c:LC,l:'LIBRE'},{c:FC_WORK,l:'F.OBL'},{c:FC_REST,l:'FEST.D'},...cpts.map(c=>({c:c.c,l:c.a}))].map((x,i)=>(
           <div key={i} style={{display:'flex',alignItems:'center',gap:3}}>
@@ -592,12 +789,14 @@ function App(){
     if(!vis.length)return null;
     return(<div style={{display:'grid',gridTemplateColumns:`repeat(${vis.length},1fr)`,gap:8,marginTop:14}}>
       {ow?.show&&<div onClick={()=>setWidgetModal('overtime')}
-        style={{background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        style={{background:TH.cardBg,borderRadius:14,padding:10,
+          boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
         <div style={{fontSize:7.5,fontWeight:700,color:TH.textSub,marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{ow.name}</div>
         <div style={{fontSize:18,fontWeight:800,color:'#F59E0B'}}>{overtimeCobrar.toFixed(1)}h</div>
       </div>}
       {tw?.show&&<div onClick={()=>setWidgetModal('trials_done')}
-        style={{background:TH.cardBg,borderRadius:14,padding:10,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
+        style={{background:TH.cardBg,borderRadius:14,padding:10,
+          boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',cursor:'pointer',textAlign:'center'}}>
         <div style={{fontSize:7.5,fontWeight:700,color:TH.textSub,marginBottom:4,textTransform:'uppercase',letterSpacing:.3}}>{tw.name}</div>
         <div style={{fontSize:18,fontWeight:800,color:'#8B5CF6'}}>{trialsDone.length}</div>
       </div>}
@@ -613,11 +812,11 @@ function App(){
   };
 
   if(!loaded)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:TH.pageBg,flexDirection:'column',gap:14}}>
-    <LogoPM size={60}/><div style={{fontSize:14,color:'#64748B'}}>Cargando…</div></div>);
+    <LogoPM size={60}/><div style={{fontSize:14,color:'#64748B'}}>Cargando…</div>
+  </div>);
 
   const hCol=settings.headerColor||'#1C1C2E';
 
-  /* ════ RENDER ════ */
   return(
   <div style={{fontFamily:'system-ui,sans-serif',background:TH.pageBg,minHeight:'100vh',width:'100%',paddingBottom:80}}>
 
@@ -634,47 +833,61 @@ function App(){
         </div>
       </div>
       <div style={{display:'flex',gap:4,flexShrink:0,alignItems:'center'}}>
-        {[['⬇',exportBackup],['⬆',()=>{setImportText('');setImportModal(true);}],['📋',()=>setShowCP(true)]].map(([l,fn])=>(
-          <button key={l} onClick={fn} style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:l==='📋'?14:10,cursor:'pointer',fontWeight:700}}>{l}</button>
-        ))}
-        <button onClick={()=>setSettingsModal(true)} style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:16,cursor:'pointer',lineHeight:1}}>⚙️</button>
+        {/* CAMBIO 3: descarga directa */}
+        <button onClick={exportBackup} title="Exportar backup (descarga JSON)"
+          style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:10,cursor:'pointer',fontWeight:700}}>⬇</button>
+        <button onClick={()=>{setImportText('');setImportModal(true);}}
+          style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:10,cursor:'pointer',fontWeight:700}}>⬆</button>
+        <button onClick={()=>setShowCP(true)}
+          style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:14,cursor:'pointer',fontWeight:700}}>📋</button>
+        <button onClick={()=>setSettingsModal(true)}
+          style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',borderRadius:14,padding:'5px 9px',color:'white',fontSize:16,cursor:'pointer',lineHeight:1}}>⚙️</button>
       </div>
     </div>
   </div>
 
-  {/* ═══ CALENDAR ═══ */}
+  {/* CALENDAR */}
   {tab==='cal'&&(
     <div style={{padding:12}}>
       <div style={{display:'flex',gap:3,marginBottom:12,background:dm?'#334155':'#E2E8F0',borderRadius:24,padding:3}}>
         {[['day','Día'],['week','Semana'],['month','Mes'],['year','Año']].map(([v,l])=>(
-          <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+          <button key={v} onClick={()=>setCv(v)} style={{flex:1,border:'none',borderRadius:20,padding:'7px 3px',
+            background:cv===v?'#1D4ED8':'transparent',color:cv===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
         ))}
       </div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:TH.cardBg,borderRadius:24,padding:'3px 6px',boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.07)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,background:TH.cardBg,borderRadius:24,padding:'3px 6px',
+        boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.07)'}}>
         <button onClick={()=>goNav(-1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>‹</button>
         <span style={{fontSize:12,fontWeight:700,color:TH.text}}>{navTitle}</span>
         <button onClick={()=>goNav(1)} style={{background:'none',border:'none',fontSize:26,cursor:'pointer',color:'#1D4ED8',padding:'0 10px',lineHeight:1}}>›</button>
       </div>
       <div style={{textAlign:'right',marginBottom:10}}>
-        <button onClick={()=>{setNav(new Date(td));setCv('week');}} style={{background:'none',border:'1.5px solid #1D4ED8',borderRadius:16,padding:'4px 13px',fontSize:11,color:'#1D4ED8',cursor:'pointer',fontWeight:700}}>Hoy</button>
+        <button onClick={()=>{setNav(new Date(td));setCv('week');}}
+          style={{background:'none',border:'1.5px solid #1D4ED8',borderRadius:16,padding:'4px 13px',fontSize:11,color:'#1D4ED8',cursor:'pointer',fontWeight:700}}>Hoy</button>
       </div>
       <div onTouchStart={hTS} onTouchEnd={hTE}>
-        {cv==='day'&&<DayViewFull/>}{cv==='week'&&<WeekView/>}{cv==='month'&&<MonthView/>}{cv==='year'&&<YearView/>}
+        {cv==='day'&&<DayViewFull/>}
+        {cv==='week'&&<WeekView/>}
+        {cv==='month'&&<MonthView/>}
+        {cv==='year'&&<YearView/>}
       </div>
       {cv!=='day'&&<LegendBar/>}
       <CalWidgets/>
     </div>
   )}
 
-  {/* ═══ RESUMEN ═══ */}
+  {/* RESUMEN */}
   {tab==='sum'&&(
     <div style={{padding:12}}>
       <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:14}}>📊 Resumen</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-        {[{k:'saldo',l:'DÍAS SALDO',v:totalDaysRem.toFixed(0),col:'#16A34A'},{k:'horas',l:'HORAS SALDO',v:totalHoursRem.toFixed(0)+'h',col:'#1D4ED8'},{k:'agotado',l:'AGOTADOS',v:cntAgotado,col:'#DC2626'}].map(s=>(
+        {[{k:'saldo',l:'DÍAS SALDO',v:totalDaysRem.toFixed(0),col:'#16A34A'},
+          {k:'horas',l:'HORAS SALDO',v:totalHoursRem.toFixed(0)+'h',col:'#1D4ED8'},
+          {k:'agotado',l:'AGOTADOS',v:cntAgotado,col:'#DC2626'}].map(s=>(
           <button key={s.k} onClick={()=>setSumFilt(f=>f===s.k?'all':s.k)}
             style={{background:sumFilt===s.k?s.col:TH.cardBg,borderRadius:14,padding:'10px 4px',textAlign:'center',
-              boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.09)',border:sumFilt===s.k?`2px solid ${s.col}`:`2px solid ${TH.border}`,cursor:'pointer'}}>
+              boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.09)',
+              border:sumFilt===s.k?`2px solid ${s.col}`:`2px solid ${TH.border}`,cursor:'pointer'}}>
             <div style={{fontSize:18,fontWeight:800,color:sumFilt===s.k?'white':s.col}}>{s.v}</div>
             <div style={{fontSize:7.5,color:sumFilt===s.k?'rgba(255,255,255,.8)':TH.textSub,fontWeight:700,marginTop:2,letterSpacing:.3}}>{s.l}</div>
           </button>
@@ -697,12 +910,9 @@ function App(){
                 background:isCarryBoth?(dm?'#2D1A00':'#FFF8F0'):isCO?(dm?'#0A2A0A':'#F0FDF4'):TH.cardBg,
                 borderRadius:14,padding:11,
                 boxShadow:isDragging?'0 8px 24px rgba(0,0,0,.3)':(dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.07)'),
-                borderLeft:`4px solid ${c.c}`,
-                borderTop:isOver?'3px solid #1D4ED8':undefined,
-                opacity:isDragging?.6:1,
-                transform:isDragging?'scale(1.02)':'scale(1)',
-                transition:'opacity .15s,transform .15s',
-                cursor:'grab'}}>
+                borderLeft:`4px solid ${c.c}`,borderTop:isOver?'3px solid #1D4ED8':undefined,
+                opacity:isDragging?.6:1,transform:isDragging?'scale(1.02)':'scale(1)',
+                transition:'opacity .15s,transform .15s',cursor:'grab'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:4}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
@@ -735,7 +945,7 @@ function App(){
     </div>
   )}
 
-  {/* ═══ PATRÓN ═══ */}
+  {/* PATRÓN */}
   {tab==='pat'&&(
     <div style={{padding:12}}>
       <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:14}}>🔄 Patrón de trabajo</div>
@@ -782,13 +992,15 @@ function App(){
     </div>
   )}
 
-  {/* ═══ GRÁFICA ═══ */}
+  {/* GRÁFICA */}
   {tab==='chart'&&(
     <div style={{padding:12}}>
       <div style={{fontSize:17,fontWeight:800,color:TH.sectionTitle,marginBottom:6}}>Distribución consumida · {td.getFullYear()}</div>
       <div style={{fontSize:11,color:TH.textSub,marginBottom:14}}>Solo días ya transcurridos y registrados, al 100%.</div>
-      {consumedPie.length===0?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:TH.textSub,marginTop:10}}>Sin datos hasta hoy.</p></div>
-        :<><Card th={TH}><PieSVG data={consumedPie} cardBg={TH.cardBg}/></Card>
+      {consumedPie.length===0
+        ?<div style={{textAlign:'center',padding:50}}><div style={{fontSize:56}}>◌</div><p style={{fontSize:13,color:TH.textSub,marginTop:10}}>Sin datos hasta hoy.</p></div>
+        :<>
+          <Card th={TH}><PieSVG data={consumedPie} cardBg={TH.cardBg}/></Card>
           <Card th={TH}>{consumedPie.map((d,i)=>(
             <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:i<consumedPie.length-1?`1px solid ${TH.border}`:'none'}}>
               <div style={{width:12,height:12,borderRadius:3,background:d.color,flexShrink:0}}/>
@@ -798,7 +1010,9 @@ function App(){
               </div>
               <div style={{textAlign:'right',flexShrink:0,fontSize:11,fontWeight:700,color:TH.textSub}}>{d.total} {d.unit}</div>
             </div>
-          ))}</Card></>}
+          ))}</Card>
+        </>
+      }
     </div>
   )}
 
@@ -828,80 +1042,196 @@ function App(){
             <button onClick={()=>setSelDay(null)} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
           </div>
         </div>
-        {/* Tipo */}
+
+        {/* Tipo de día */}
         <div style={{marginBottom:16}}>
           <label style={{fontSize:10,fontWeight:800,color:TH.textSub,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Tipo de día</label>
           <div style={{position:'relative'}}>
             <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value,hm:'full',hrs:8}))}
               style={{width:'100%',borderRadius:24,border:`1.5px solid ${TH.inputBorder}`,padding:'11px 18px',fontSize:12,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
-              <option value="TRABA">● TRABA — Trabajo</option><option value="LIBRE">○ LIBRE — Día libre</option>
+              <option value="TRABA">● TRABA — Trabajo</option>
+              <option value="LIBRE">○ LIBRE — Día libre</option>
               {cpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,28)} ({Math.max(0,c.t-c.us).toFixed(1)}{c.u} pend.)</option>)}
             </select>
             <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:TH.textSub,fontSize:11}}>▼</span>
           </div>
         </div>
-        {/* Horas modo */}
-        {isHourCpt&&(<div style={{marginBottom:16}}>
-          <label style={{fontSize:10,fontWeight:800,color:TH.textSub,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
-          <div style={{display:'flex',gap:6}}>
-            {[['full','● Completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
-              <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
-                style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',background:form.hm===v?'#1D4ED8':TH.cardBg2,color:form.hm===v?'white':TH.textSub,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
-            ))}
-          </div>
-          {form.hm!=='full'&&<div style={{marginTop:10}}>
-            <label style={{fontSize:10,color:TH.textSub,display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
-            <input type="number" min=".5" max="8" step=".5" value={form.hrs} onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
-              style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
-          </div>}
-        </div>)}
-        {/* Datos servicio */}
-        {form.type==='TRABA'&&(<div style={{background:dm?'#0C1A2E':'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
-          <STitle th={TH} icon="📋">Datos del servicio</STitle>
-          {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Matrícula'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
-            <IRow key={k} th={TH} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
-          ))}
-          <IRow th={TH} label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
-        </div>)}
-        {/* Horas extra */}
-        {(form.type==='TRABA'||form.type==='LIBRE')&&(<div style={{background:dm?'#1A1400':'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
-          <STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-            {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
-              <div key={k}>
-                <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
-                <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
-                  onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
-                  style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,boxSizing:'border-box',background:TH.inputBg,fontFamily:'inherit',color:TH.text}}/>
-              </div>
-            ))}
-            <div>
-              <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
-              <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
-                style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
-                <option value="none">Sin dieta</option><option value="media">Media (+0.5h)</option><option value="completa">Completa (+1h)</option>
-              </select>
-            </div>
-          </div>
-          <IRow th={TH} label="Motivo de las horas" ph="Ej: Operación especial, guardia extra…" value={form.eh.motivo||''} onChange={v=>setForm(f=>({...f,eh:{...f.eh,motivo:v}}))}/>
-          <div style={{marginTop:4}}>
-            <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:6,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Compensación</label>
-            <div style={{display:'flex',gap:8}}>
-              {[['cobrar','💶 A cobrar','#F59E0B'],['librar','🕐 A librar','#16A34A']].map(([v,l,col])=>(
-                <button key={v} onClick={()=>setForm(f=>({...f,eh:{...f.eh,tipo:v}}))}
-                  style={{flex:1,border:'none',borderRadius:20,padding:'10px 8px',background:form.eh.tipo===v?col:TH.cardBg2,color:form.eh.tipo===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>
-                  {l}
-                </button>
+
+        {/* Modo horas (solo conceptos hora) */}
+        {isHourCpt&&(
+          <div style={{marginBottom:16}}>
+            <label style={{fontSize:10,fontWeight:800,color:TH.textSub,display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Modo de horas</label>
+            <div style={{display:'flex',gap:6}}>
+              {[['full','● Completo'],['salida','↑ Salida'],['entrada','↓ Entrada']].map(([v,l])=>(
+                <button key={v} onClick={()=>setForm(f=>({...f,hm:v,hrs:v==='full'?8:f.hrs}))}
+                  style={{flex:1,border:'none',borderRadius:20,padding:'9px 4px',
+                    background:form.hm===v?'#1D4ED8':TH.cardBg2,color:form.hm===v?'white':TH.textSub,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
               ))}
             </div>
-            {form.eh.tipo==='librar'&&(parseFloat(form.eh.d)||0)+(parseFloat(form.eh.n)||0)+(parseFloat(form.eh.fd)||0)>0&&(
-              <div style={{marginTop:8,background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'8px 12px',fontSize:11,color:'#15803D',fontWeight:600}}>
-                ✅ Se añadirán {getLibrarH(form.eh).toFixed(1)}h al total de HLIBS
+            {form.hm!=='full'&&(
+              <div style={{marginTop:10}}>
+                <label style={{fontSize:10,color:TH.textSub,display:'block',marginBottom:4,fontWeight:600}}>Horas a descontar</label>
+                <input type="number" min=".5" max="8" step=".5" value={form.hrs}
+                  onChange={e=>setForm(f=>({...f,hrs:parseFloat(e.target.value)||0}))}
+                  style={{width:'100%',borderRadius:20,border:`1.5px solid ${TH.inputBorder}`,padding:'9px 14px',fontSize:13,boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
               </div>
             )}
           </div>
-        </div>)}
-        {/* Juicio */}
+        )}
+
+        {/* Datos del servicio */}
+        {form.type==='TRABA'&&(
+          <div style={{background:dm?'#0C1A2E':'#EFF6FF',borderRadius:16,padding:14,marginBottom:14}}>
+            <STitle th={TH} icon="📋">Datos del servicio</STitle>
+            {/* CAMBIO 4: placeholder "Número de vehículo" */}
+            {[['ind','Indicativo','Ej: A-23'],['veh','Vehículo','Número de vehículo'],['os','Orden de servicio','Nº de orden'],['pe','Puesto en el evento','Descripción']].map(([k,l,ph])=>(
+              <IRow key={k} th={TH} label={l} ph={ph} value={form.wd[k]||''} onChange={v=>setForm(f=>({...f,wd:{...f.wd,[k]:v}}))}/>
+            ))}
+            <IRow th={TH} label="Notas" ph="Observaciones…" value={form.wd.notas||''} multiline onChange={v=>setForm(f=>({...f,wd:{...f.wd,notas:v}}))}/>
+          </div>
+        )}
+
+        {/* CAMBIO 1: Conceptos adicionales de horas (slots) */}
+        {(form.type==='TRABA'||form.type==='LIBRE'||form.slots.length>0)&&hourCpts.length>0&&(
+          <div style={{background:dm?'#0D1F30':'#E0F2FE',borderRadius:16,padding:14,marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:(form.slots.length>0||showSlotAdd)?10:0}}>
+              <STitle th={TH} icon="🧩">Conceptos de horas</STitle>
+              {!showSlotAdd&&(
+                <button onClick={()=>{
+                  setShowSlotAdd(true);
+                  const first=hourCpts[0];
+                  if(first)setSlotForm({type:first.id,hrs:1});
+                }} style={{background:'#0284C7',border:'none',borderRadius:16,padding:'5px 12px',fontSize:11,color:'white',cursor:'pointer',fontWeight:700}}>
+                  + Añadir
+                </button>
+              )}
+            </div>
+            {/* Slots existentes */}
+            {form.slots.map((sl,i)=>{
+              const c=cpts.find(x=>x.id===sl.type);
+              return c?(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:10,
+                  background:dm?'rgba(255,255,255,.06)':'rgba(255,255,255,.7)',marginBottom:5}}>
+                  <div style={{width:10,height:10,borderRadius:2,background:c.c,flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:TH.text,flex:1}}>{c.a}</span>
+                  <span style={{fontSize:11,color:TH.textSub,marginRight:4}}>{sl.hrs}h</span>
+                  <button onClick={()=>setForm(f=>({...f,slots:f.slots.filter((_,j)=>j!==i)}))}
+                    style={{background:'none',border:'none',color:'#B91C1C',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}>✕</button>
+                </div>
+              ):null;
+            })}
+            {/* Totalizador */}
+            {form.slots.length>0&&(()=>{
+              const tot=form.slots.reduce((s,sl)=>s+(parseFloat(sl.hrs)||0),0);
+              const rest=Math.max(0,8-tot);
+              return(
+                <div style={{fontSize:10,color:tot>8?'#DC2626':'#0284C7',fontWeight:700,
+                  marginBottom:showSlotAdd?10:0,background:dm?'rgba(255,255,255,.05)':'rgba(255,255,255,.6)',
+                  borderRadius:8,padding:'4px 8px'}}>
+                  {tot.toFixed(1)}h asignadas · {rest.toFixed(1)}h como {form.type==='LIBRE'?'LIBRE':'TRABA'}{tot>8?' ⚠️ Supera 8h':''}
+                </div>
+              );
+            })()}
+            {/* Formulario añadir slot */}
+            {showSlotAdd&&(
+              <div style={{background:dm?'rgba(255,255,255,.08)':'rgba(255,255,255,.85)',borderRadius:12,padding:10,marginTop:4}}>
+                <div style={{marginBottom:8}}>
+                  <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Concepto de horas</label>
+                  <select value={slotForm.type||hourCpts[0]?.id||''} onChange={e=>setSlotForm(p=>({...p,type:e.target.value}))}
+                    style={{width:'100%',borderRadius:16,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 12px',fontSize:11,
+                      background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+                    {hourCpts.map(c=><option key={c.id} value={c.id}>{c.a} — {c.n.substring(0,22)} ({Math.max(0,c.t-c.us).toFixed(1)}h pend.)</option>)}
+                  </select>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:10,fontWeight:700,color:TH.textSub,display:'block',marginBottom:3,textTransform:'uppercase'}}>Horas a asignar</label>
+                  <input type="number" min=".5" max="8" step=".5" value={slotForm.hrs}
+                    onChange={e=>setSlotForm(p=>({...p,hrs:parseFloat(e.target.value)||1}))}
+                    style={{width:'100%',borderRadius:16,border:`1.5px solid ${TH.inputBorder}`,padding:'8px 12px',fontSize:12,
+                      boxSizing:'border-box',fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>{setShowSlotAdd(false);setSlotForm({type:'',hrs:1});}}
+                    style={{flex:1,background:TH.cardBg2,border:'none',borderRadius:14,padding:'8px',fontSize:11,color:TH.textSub,cursor:'pointer',fontWeight:600}}>Cancelar</button>
+                  <button onClick={()=>{
+                    const t=slotForm.type||hourCpts[0]?.id||'';
+                    const h=parseFloat(slotForm.hrs)||1;
+                    if(!t)return;
+                    setForm(f=>({...f,slots:[...f.slots,{type:t,hrs:h}]}));
+                    setShowSlotAdd(false);setSlotForm({type:'',hrs:1});
+                  }} style={{flex:2,background:'#0284C7',border:'none',borderRadius:14,padding:'8px',fontSize:11,color:'white',cursor:'pointer',fontWeight:700}}>
+                    ✅ Añadir al día
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CAMBIO 6: Horas extraordinarias PLEGADAS */}
+        {(form.type==='TRABA'||form.type==='LIBRE')&&(
+          <div style={{background:dm?'#1A1400':'#FEFCE8',borderRadius:16,padding:14,marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showEh?12:0}}>
+              <STitle th={TH} icon="⏰">Horas extraordinarias</STitle>
+              <div style={{display:'flex',gap:6}}>
+                {showEh&&(form.eh.d||form.eh.n||form.eh.fd||form.eh.dieta!=='none')&&(
+                  <button onClick={()=>setForm(f=>({...f,eh:{...EF.eh}}))}
+                    style={{background:dm?'#3B0000':'#FEF2F2',border:'none',borderRadius:16,padding:'5px 10px',fontSize:10,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Quitar</button>
+                )}
+                <button onClick={()=>setShowEh(v=>!v)}
+                  style={{background:showEh?'#D97706':(dm?'#2D2200':'#FDE68A'),border:'none',borderRadius:20,padding:'5px 14px',
+                    fontSize:11,color:showEh?'white':'#92400E',cursor:'pointer',fontWeight:700}}>
+                  {showEh?'▲ Plegar':'+ Añadir'}
+                </button>
+              </div>
+            </div>
+            {showEh&&(
+              <>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                  {[['d','🌤 Diurnas'],['n','🌙 Nocturnas'],['fd','🎉 Festiva/Dom.']].map(([k,l])=>(
+                    <div key={k}>
+                      <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>{l}</label>
+                      <input type="number" min="0" step=".5" value={form.eh[k]||''} placeholder="0h"
+                        onChange={e=>setForm(f=>({...f,eh:{...f.eh,[k]:e.target.value}}))}
+                        style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:12,
+                          boxSizing:'border-box',background:TH.inputBg,fontFamily:'inherit',color:TH.text}}/>
+                    </div>
+                  ))}
+                  <div>
+                    <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:3,fontWeight:700}}>🍽 Dieta</label>
+                    <select value={form.eh.dieta} onChange={e=>setForm(f=>({...f,eh:{...f.eh,dieta:e.target.value}}))}
+                      style={{width:'100%',borderRadius:20,border:'1.5px solid #FDE68A',padding:'8px 12px',fontSize:11,
+                        background:TH.inputBg,appearance:'none',fontFamily:'inherit',fontWeight:600,color:TH.text}}>
+                      <option value="none">Sin dieta</option>
+                      <option value="media">Media (+0.5h)</option>
+                      <option value="completa">Completa (+1h)</option>
+                    </select>
+                  </div>
+                </div>
+                <IRow th={TH} label="Motivo de las horas" ph="Ej: Operación especial, guardia extra…" value={form.eh.motivo||''} onChange={v=>setForm(f=>({...f,eh:{...f.eh,motivo:v}}))}/>
+                <div style={{marginTop:4}}>
+                  <label style={{fontSize:10,color:'#92400E',display:'block',marginBottom:6,fontWeight:700,textTransform:'uppercase',letterSpacing:.4}}>Compensación</label>
+                  <div style={{display:'flex',gap:8}}>
+                    {[['cobrar','💶 A cobrar','#F59E0B'],['librar','🕐 A librar','#16A34A']].map(([v,l,col])=>(
+                      <button key={v} onClick={()=>setForm(f=>({...f,eh:{...f.eh,tipo:v}}))}
+                        style={{flex:1,border:'none',borderRadius:20,padding:'10px 8px',
+                          background:form.eh.tipo===v?col:TH.cardBg2,color:form.eh.tipo===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  {form.eh.tipo==='librar'&&(parseFloat(form.eh.d)||0)+(parseFloat(form.eh.n)||0)+(parseFloat(form.eh.fd)||0)>0&&(
+                    <div style={{marginTop:8,background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'8px 12px',fontSize:11,color:'#15803D',fontWeight:600}}>
+                      ✅ Se añadirán {getLibrarH(form.eh).toFixed(1)}h al total de HLIBS
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* CAMBIO 2: Juicio con horas a cobrar/librar */}
         <div style={{background:dm?'#1A0F2E':'#F3E8FF',borderRadius:16,padding:14,marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:form.juicio.active?12:0}}>
             <STitle th={TH} icon="⚖️">Juicio</STitle>
@@ -911,29 +1241,67 @@ function App(){
                   style={{background:dm?'#3B0000':'#FEF2F2',border:'none',borderRadius:16,padding:'5px 10px',fontSize:10,color:'#B91C1C',cursor:'pointer',fontWeight:700}}>🗑 Quitar</button>
               )}
               <button onClick={()=>setForm(f=>({...f,juicio:{...f.juicio,active:!f.juicio.active}}))}
-                style={{background:form.juicio.active?'#7C3AED':(dm?'#2D1A4A':'#DDD6FE'),border:'none',borderRadius:20,padding:'5px 14px',fontSize:11,color:form.juicio.active?'white':'#6D28D9',cursor:'pointer',fontWeight:700}}>
+                style={{background:form.juicio.active?'#7C3AED':(dm?'#2D1A4A':'#DDD6FE'),border:'none',borderRadius:20,padding:'5px 14px',
+                  fontSize:11,color:form.juicio.active?'white':'#6D28D9',cursor:'pointer',fontWeight:700}}>
                 {form.juicio.active?'✓ Activo':'+ Añadir'}
               </button>
             </div>
           </div>
-          {form.juicio.active&&(<>
-            <IRow th={TH} label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
-            <IRow th={TH} label="Fecha del juicio" type="date" value={form.juicio.fecha} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,fecha:v}}))}/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <IRow th={TH} label="Hora inicio" type="time" value={form.juicio.horaInicio} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaInicio:v}}))}/>
-              <IRow th={TH} label="Hora fin" type="time" value={form.juicio.horaFin} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaFin:v}}))}/>
-            </div>
-            <IRow th={TH} label="Término municipal" value={form.juicio.termMunicipal}
-              onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,termMunicipal:v}}))}
-              opts={[{v:'dentro',l:'Dentro del término'},{v:'fuera',l:'Fuera del término'}]}/>
-          </>)}
+          {form.juicio.active&&(
+            <>
+              <IRow th={TH} label="Juzgado" ph="Nº Juzgado" value={form.juicio.juzgado} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,juzgado:v}}))}/>
+              <IRow th={TH} label="Fecha del juicio" type="date" value={form.juicio.fecha} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,fecha:v}}))}/>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <IRow th={TH} label="Hora inicio" type="time" value={form.juicio.horaInicio} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaInicio:v}}))}/>
+                <IRow th={TH} label="Hora fin" type="time" value={form.juicio.horaFin} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horaFin:v}}))}/>
+              </div>
+              <IRow th={TH} label="Término municipal" value={form.juicio.termMunicipal}
+                onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,termMunicipal:v}}))}
+                opts={[{v:'dentro',l:'Dentro del término'},{v:'fuera',l:'Fuera del término'}]}/>
+              {/* CAMBIO 2: horas del juicio */}
+              <div style={{borderTop:`1px solid ${dm?'#3B2060':'#DDD6FE'}`,marginTop:10,paddingTop:12}}>
+                <label style={{fontSize:10,fontWeight:800,color:'#6D28D9',display:'block',marginBottom:8,textTransform:'uppercase',letterSpacing:.4}}>
+                  ⏱ Horas del juicio
+                </label>
+                <IRow th={TH} label="Número de horas" type="number" ph="Ej: 2" value={form.juicio.horas||''} onChange={v=>setForm(f=>({...f,juicio:{...f.juicio,horas:v}}))}/>
+                <label style={{fontSize:10,fontWeight:700,color:'#6D28D9',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.4}}>Compensación de las horas</label>
+                <div style={{display:'flex',gap:8,marginBottom:8}}>
+                  {[['cobrar','💶 A cobrar','#7C3AED'],['librar','🕐 A librar','#6D28D9']].map(([v,l,col])=>(
+                    <button key={v} onClick={()=>setForm(f=>({...f,juicio:{...f.juicio,horasTipo:v}}))}
+                      style={{flex:1,border:'none',borderRadius:20,padding:'9px 8px',
+                        background:form.juicio.horasTipo===v?col:TH.cardBg2,color:form.juicio.horasTipo===v?'white':TH.textSub,fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {form.juicio.horasTipo==='librar'&&(
+                  <div style={{background:dm?'#1A0F3E':'#EDE9FE',borderRadius:12,padding:'8px 12px',fontSize:11,color:'#6D28D9',fontWeight:700}}>
+                    ✅ Se añadirán {form.juicio.termMunicipal==='fuera'?7:6}h a HLIBS
+                    <span style={{fontWeight:400,color:TH.textSub,marginLeft:4}}>
+                      ({form.juicio.termMunicipal==='fuera'?'fuera del término → 7h':'dentro del término → 6h'})
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
+
+        {/* CAMBIO 5: Nota del día */}
+        <div style={{background:dm?'#0F2030':'#EFF6FF',borderRadius:16,padding:14,marginBottom:16}}>
+          <STitle th={TH} icon="📝">Nota del día</STitle>
+          <textarea value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))}
+            placeholder="Escribe una nota para este día…" rows={3}
+            style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.inputBorder}`,padding:'9px 12px',
+              fontSize:12,fontFamily:'inherit',resize:'none',boxSizing:'border-box',background:TH.inputBg,color:TH.text}}/>
+        </div>
+
         <Btn full onClick={saveEntry}>💾 Guardar día</Btn>
       </div>
     </div>
   )}
 
-  {/* ═══ CONCEPTS PANEL ═══ */}
+  {/* CONCEPTS PANEL */}
   {showCP&&(
     <div style={{position:'fixed',inset:0,background:TH.pageBg,zIndex:200,overflowY:'auto'}}>
       <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
@@ -944,7 +1312,8 @@ function App(){
       </div>
       <div style={{padding:12}}>
         {cpts.map(c=>{const pend=Math.max(0,c.t-c.us),pct=c.t>0?Math.min((c.us/c.t)*100,100):0;return(
-          <div key={c.id} style={{marginBottom:8,background:TH.cardBg,borderRadius:14,padding:11,boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
+          <div key={c.id} style={{marginBottom:8,background:TH.cardBg,borderRadius:14,padding:11,
+            boxShadow:dm?'0 1px 5px rgba(0,0,0,.3)':'0 1px 5px rgba(0,0,0,.08)',borderLeft:`5px solid ${c.c}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
               <div style={{display:'flex',alignItems:'center',gap:5}}>
                 <div style={{width:10,height:10,borderRadius:2,background:c.c}}/>
@@ -960,7 +1329,7 @@ function App(){
     </div>
   )}
 
-  {/* ═══ MULTI-DATE PICKER ═══ */}
+  {/* MULTI-DATE PICKER */}
   {mpModal&&(()=>{
     const isMw=mpModal==='mw',color=isMw?FC_WORK:FC_REST;
     const y=mpNav.getFullYear(),m=mpNav.getMonth();
@@ -972,8 +1341,10 @@ function App(){
         <div style={{background:TH.cardBg,borderRadius:'22px 22px 0 0',width:'100%',maxHeight:'92vh',overflowY:'auto',padding:'16px 14px 36px'}}>
           <div style={{width:36,height:4,background:TH.border,borderRadius:2,margin:'0 auto 14px'}}/>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div><div style={{fontSize:15,fontWeight:800,color:TH.text}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
-              <div style={{fontSize:11,color:TH.textSub,marginTop:2}}>Toca para seleccionar/deseleccionar</div></div>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:TH.text}}>{isMw?'🔴':'🟢'} {isMw?'F. TRABAJO':'F. DESCANSO'}</div>
+              <div style={{fontSize:11,color:TH.textSub,marginTop:2}}>Toca para seleccionar/deseleccionar</div>
+            </div>
             <button onClick={()=>setMpModal(null)} style={{background:TH.cardBg2,border:'none',borderRadius:20,width:33,height:33,fontSize:16,cursor:'pointer',color:TH.textSub}}>✕</button>
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:TH.cardBg2,borderRadius:20,padding:'6px 8px',marginBottom:12}}>
@@ -999,7 +1370,8 @@ function App(){
             })}
           </div>
           <div style={{background:mpSel.size>0?`${color}22`:TH.cardBg2,borderRadius:16,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div><div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:TH.textSub}}>{mpSel.size} día(s) seleccionado(s)</div>
+            <div>
+              <div style={{fontSize:14,fontWeight:800,color:mpSel.size>0?color:TH.textSub}}>{mpSel.size} día(s) seleccionado(s)</div>
               {mpSel.size>0&&<div style={{fontSize:10,color:TH.textSub,marginTop:2}}>{[...mpSel].sort().map(d=>d.slice(5)).join(' · ')}</div>}
             </div>
             {mpSel.size>0&&<button onClick={()=>setMpSel(new Set())} style={{background:'none',border:`1px solid ${TH.border}`,borderRadius:12,padding:'4px 10px',fontSize:10,color:TH.textSub,cursor:'pointer',fontWeight:600}}>Limpiar</button>}
@@ -1010,7 +1382,7 @@ function App(){
     );
   })()}
 
-  {/* ═══ AG MODAL ═══ */}
+  {/* AG MODAL */}
   {agModal&&(()=>{const c=cpts.find(x=>x.id===agModal);if(!c)return null;return(
     <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.6)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
       <div style={{background:TH.cardBg,borderRadius:20,padding:24,width:'100%',maxWidth:320,boxShadow:'0 8px 40px rgba(0,0,0,.25)'}}>
@@ -1019,13 +1391,19 @@ function App(){
         <IRow th={TH} label={`Valor en ${c.u}`} type="number" ph="Ej: 8" value={agAmt} onChange={v=>setAgAmt(v)}/>
         <div style={{display:'flex',gap:8,marginTop:14}}>
           <Btn full outline onClick={()=>setAgModal(null)}>Cancelar</Btn>
-          <Btn full onClick={()=>{const v=parseFloat(agAmt);if(!isNaN(v)&&v>=0){if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));else setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));}setAgModal(null);}}>Guardar</Btn>
+          <Btn full onClick={()=>{
+            const v=parseFloat(agAmt);
+            if(!isNaN(v)&&v>=0){
+              if(agTarget==='us')setCpts(p=>p.map(x=>x.id===agModal?{...x,us:v}:x));
+              else setCpts(p=>p.map(x=>x.id===agModal?{...x,t:v}:x));
+            }setAgModal(null);
+          }}>Guardar</Btn>
         </div>
       </div>
     </div>
   );})()} 
 
-  {/* ═══ ADD CONCEPT ═══ */}
+  {/* ADD CONCEPT */}
   {addCptModal&&(
     <ModalShell th={TH} title="➕ Nuevo concepto" onClose={()=>setAddCptModal(false)}>
       <IRow th={TH} label="Abreviatura (máx. 10)" ph="Ej: MICP" value={newCpt.a} onChange={v=>setNewCpt(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
@@ -1052,7 +1430,7 @@ function App(){
     </ModalShell>
   )}
 
-  {/* ═══ EDIT CONCEPT ═══ */}
+  {/* EDIT CONCEPT */}
   {editCptId&&editCptData&&(
     <ModalShell th={TH} title="✏️ Editar concepto" onClose={()=>{setEditCptId(null);setEditCptData(null);}}>
       <IRow th={TH} label="Abreviatura (máx. 10)" ph="Ej: VACAN" value={editCptData.a} onChange={v=>setEditCptData(p=>({...p,a:v.toUpperCase().slice(0,10)}))}/>
@@ -1079,7 +1457,7 @@ function App(){
     </ModalShell>
   )}
 
-  {/* ═══ SETTINGS ═══ */}
+  {/* SETTINGS */}
   {settingsModal&&(
     <div style={{position:'fixed',inset:0,background:TH.pageBg,zIndex:300,overflowY:'auto'}}>
       <div style={{background:`linear-gradient(135deg,${hCol},${hCol}cc)`,color:'white',padding:'15px 16px',position:'sticky',top:0,zIndex:1}}>
@@ -1162,8 +1540,9 @@ function App(){
             );})}
           </div>
         </Card>
+        {/* CAMBIO 5: widgets con toggle de notas */}
         <Card th={TH}>
-          <STitle th={TH} icon="📦">Widgets del calendario</STitle>
+          <STitle th={TH} icon="📦">Widgets y visualización</STitle>
           {settings.widgets.map((w,i)=>(
             <div key={w.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<settings.widgets.length-1?`1px solid ${TH.border}`:'none'}}>
               <button onClick={()=>setSettings(s=>({...s,widgets:s.widgets.map((ww,ii)=>ii===i?{...ww,show:!ww.show}:ww)}))}
@@ -1174,12 +1553,15 @@ function App(){
                 style={{flex:1,border:`1px solid ${TH.border}`,borderRadius:12,padding:'6px 10px',fontSize:12,fontFamily:'inherit',background:TH.inputBg,color:TH.text}}/>
             </div>
           ))}
+          <div style={{fontSize:10,color:TH.textSub,marginTop:8,lineHeight:1.5}}>
+            📝 "Notas del día" controla si se muestran las notas en vista semana y día
+          </div>
         </Card>
       </div>
     </div>
   )}
 
-  {/* ═══ WIDGET MODALS ═══ */}
+  {/* WIDGET MODALS */}
   {widgetModal==='overtime'&&(
     <ModalShell th={TH} title={`⏰ ${settings.widgets.find(w=>w.id==='overtime')?.name||'HORAS EXTRAS 💶'}`} onClose={()=>setWidgetModal(null)}>
       <div style={{marginBottom:12,background:dm?'#1A1000':'#FFFBEB',borderRadius:14,padding:12,textAlign:'center'}}>
@@ -1212,7 +1594,8 @@ function App(){
           <div key={i} style={{padding:'10px 0',borderBottom:`1px solid ${TH.border}`}}>
             <div style={{fontWeight:800,color:TH.text,fontSize:13}}>{t.dk}</div>
             <div style={{fontSize:11,color:TH.textSub,marginTop:3}}>
-              {t.juzgado&&<span>⚖️ {t.juzgado} · </span>}{t.horaInicio&&<span>🕐 {t.horaInicio}{t.horaFin&&`–${t.horaFin}`}</span>}
+              {t.juzgado&&<span>⚖️ {t.juzgado} · </span>}
+              {t.horaInicio&&<span>🕐 {t.horaInicio}{t.horaFin&&`–${t.horaFin}`}</span>}
               {t.termMunicipal&&<span> · {t.termMunicipal==='dentro'?'📍 Dentro':'📍 Fuera'}</span>}
             </div>
           </div>
@@ -1246,26 +1629,21 @@ function App(){
     </ModalShell>
   )}
 
-  {/* ═══ EXPORT / IMPORT ═══ */}
-  {exportModal&&(<ModalShell th={TH} title="⬇ Exportar datos" onClose={()=>setExportModal(false)}>
-    {copyOk?<div style={{background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#15803D',fontWeight:700,marginBottom:12}}>✅ Copiado al portapapeles</div>
-      :<div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Copia el texto y guárdalo en Drive, notas, etc.</div>}
-    <textarea readOnly value={exportJson} rows={7} onClick={e=>e.target.select()}
-      style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
-    <div style={{display:'flex',gap:8,marginTop:12}}>
-      <Btn full outline onClick={()=>setExportModal(false)}>Cerrar</Btn>
-      <Btn full onClick={()=>{navigator.clipboard.writeText(exportJson).then(()=>setCopyOk(true)).catch(()=>{});}}>📋 Copiar</Btn>
-    </div>
-  </ModalShell>)}
-  {importModal&&(<ModalShell th={TH} title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
-    <div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>Pega el JSON exportado. Se sobreescribirán todos los datos.</div>
-    <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
-      style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
-    <div style={{display:'flex',gap:8,marginTop:12}}>
-      <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
-      <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
-    </div>
-  </ModalShell>)}
+  {/* IMPORT */}
+  {importModal&&(
+    <ModalShell th={TH} title="⬆ Importar datos" onClose={()=>setImportModal(false)}>
+      <div style={{background:dm?'#1A1400':'#FEF9C3',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:12}}>
+        Pega el JSON exportado. Se sobreescribirán todos los datos.
+      </div>
+      <textarea value={importText} onChange={e=>setImportText(e.target.value)} placeholder='Pega el JSON aquí…' rows={7}
+        style={{width:'100%',borderRadius:12,border:`1.5px solid ${TH.border}`,padding:'10px 12px',fontSize:10,fontFamily:'monospace',
+          boxSizing:'border-box',background:TH.cardBg2,resize:'none',color:TH.text}}/>
+      <div style={{display:'flex',gap:8,marginTop:12}}>
+        <Btn full outline onClick={()=>setImportModal(false)}>Cancelar</Btn>
+        <Btn full disabled={!importText.trim()} color='#16A34A' onClick={doImport}>✅ Importar</Btn>
+      </div>
+    </ModalShell>
+  )}
 
   </div>);
 }
