@@ -38,7 +38,11 @@ const LogoPM=({size=36})=>(
     <text x="50" y="69" textAnchor="middle" fontSize="5.8" fontWeight="800" fill="white" letterSpacing=".2">PM MADRID</text>
   </svg>
 );
-const RenderLogo=({type,size=34})=>type==='pm'?<LogoPM size={size}/>:<span style={{fontSize:size*.88,lineHeight:1}}>{LOGO_OPTS.find(o=>o.id===type)?.e||'👮'}</span>;
+const RenderLogo=({type,size=34,customData})=>{
+  if(type==='custom'&&customData)return<img src={customData} alt="logo" style={{width:size,height:size,borderRadius:6,objectFit:'contain',flexShrink:0}}/>;
+  if(type==='pm')return<LogoPM size={size}/>;
+  return<span style={{fontSize:size*.88,lineHeight:1}}>{LOGO_OPTS.find(o=>o.id===type)?.e||'👮'}</span>;
+};
 
 const INIT_CPTS=[
   {id:'HLANT',a:'HLANT',n:'HORAS LIBRES AÑOS ANTERIORES',t:0,u:'H',c:'#FF6B6B',us:0,carryover:'both'},
@@ -73,7 +77,7 @@ const INIT_CPTS=[
 const INIT_PROF=(name='Principal')=>({name,cpts:INIT_CPTS.map(c=>({...c})),ents:{},mrDays:[],mwDays:[],pat:[]});
 
 /* CAMBIO 5: widget notes */
-const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',darkMode:false,widgets:[
+const INIT_SET={headerColor:'#1C1C2E',logoType:'pm',customLogoData:null,darkMode:false,widgets:[
   {id:'overtime',name:'HORAS EXTRAS 💶',show:true},
   {id:'trials_done',name:'Juicios realizados',show:true},
   {id:'trials_future',name:'Juicios futuros',show:true},
@@ -92,7 +96,11 @@ const EF={
 
 const getLibrarH=eh=>{
   if(!eh||eh.tipo!=='librar')return 0;
-  return(parseFloat(eh.d)||0)+(parseFloat(eh.n)||0)+(parseFloat(eh.fd)||0)+(eh.dieta==='media'?.5:eh.dieta==='completa'?1:0);
+  const d=parseFloat(eh.d)||0;
+  const n=+(((parseFloat(eh.n)||0)*1.4).toFixed(2));
+  const fd=+(((parseFloat(eh.fd)||0)*1.4).toFixed(2));
+  const dieta=eh.dieta==='media'?.5:eh.dieta==='completa'?1:0;
+  return+(d+n+fd+dieta).toFixed(2);
 };
 /* CAMBIO 2: juicio a librar → 6h (dentro) o 7h (fuera) a HLIBS */
 const getLibrarHJuicio=j=>{
@@ -482,6 +490,24 @@ function App(){
     setEnts(p=>{const n={...p};delete n[selDay];return n;});setSelDay(null);
   };
 
+  const UCS42_PAT=['work','work','rest','rest','work','work','work','work','work','rest','rest','work','work','work','work','work','work','rest','rest','rest','work','work','work','rest','rest','work','work','work','work','work','rest','rest','work','work','rest','rest','work','work','work','work','work','work'];
+  const UCS42_MW=['2026-01-01','2026-05-01','2026-05-02','2026-08-14','2026-12-07','2026-12-08'];
+  const UCS42_MR=['2026-01-06','2026-04-02','2026-04-03','2026-04-04','2026-05-15','2026-10-12','2026-11-02','2026-11-09','2026-12-24','2026-12-25','2026-12-31'];
+  const applyUCS42=()=>{
+    if(!window.confirm('¿Aplicar cuadrante UCS42 2026? Se sobreescribirán los días del año 2026 y se fijarán los festivos.'))return;
+    const year=2026,ne={...ents};
+    let pi=0,cur=new Date(year,0,1),end=new Date(year,11,31);
+    while(cur<=end){const dk=toKey(cur);
+      if(!UCS42_MW.includes(dk)&&!UCS42_MR.includes(dk)){
+        const pt=UCS42_PAT[pi%UCS42_PAT.length];
+        ne[dk]={...EF,type:pt==='work'?'TRABA':'LIBRE',hrs:pt==='work'?8:0,slots:[],nota:''};
+      }pi++;cur=addD(cur,1);}
+    setEnts(ne);
+    setMwDays(prev=>[...new Set([...prev.filter(d=>!d.startsWith('2026-')),...UCS42_MW])]);
+    setMrDays(prev=>[...new Set([...prev.filter(d=>!d.startsWith('2026-')),...UCS42_MR])]);
+    setTab('cal');
+  };
+
   const applyPat=()=>{
     if(!pat.length)return;
     const year=td.getFullYear(),ne={...ents};
@@ -629,7 +655,7 @@ function App(){
   /* CAMBIO 5: WeekView con fila de notas */
   const WeekView=()=>{
     const ws=monStart(nav),days=Array.from({length:7},(_,i)=>addD(ws,i));
-    const hasAnyNota=showNotesWidget&&days.some(d=>ents[toKey(d)]?.nota);
+    const notaDays=showNotesWidget?days.filter(d=>ents[toKey(d)]?.nota):[];
     return(<div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4}}>
         {DN.map((d,i)=><div key={i} style={{textAlign:'center',fontSize:11,fontWeight:700,color:i>=5?'#DC2626':TH.textSub}}>{d}</div>)}
@@ -637,17 +663,24 @@ function App(){
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
         {days.map(d=><DayCell key={toKey(d)} dk={toKey(d)} weekMode/>)}
       </div>
-      {hasAnyNota&&(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginTop:5}}>
-          {days.map(d=>{
+      {notaDays.length>0&&(
+        <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
+          {notaDays.map(d=>{
             const dk=toKey(d),nota=ents[dk]?.nota;
-            return(<div key={dk} style={{
-              fontSize:8,color:TH.text,
-              background:nota?(dm?'#1E293B':'#F0F4F8'):'transparent',
-              borderRadius:7,padding:nota?'4px 5px':0,
-              lineHeight:1.35,border:nota?`1px solid ${TH.border}`:'none',
-              wordBreak:'break-word'
-            }}>{nota||''}</div>);
+            const dow=d.getDay(),isWE=dow===0||dow===6;
+            const dname=DN[dow===0?6:dow-1];
+            return(
+              <div key={dk} style={{
+                width:'100%',background:dm?'#1E293B':'#F0F4F8',
+                borderRadius:10,padding:'8px 12px',
+                border:`1px solid ${TH.border}`,boxSizing:'border-box'
+              }}>
+                <span style={{fontSize:9,fontWeight:800,color:isWE?'#DC2626':'#1D4ED8',marginRight:6,textTransform:'uppercase'}}>
+                  {dname} {d.getDate()}
+                </span>
+                <span style={{fontSize:11,color:TH.text,lineHeight:1.45,whiteSpace:'pre-wrap'}}>{nota}</span>
+              </div>
+            );
           })}
         </div>
       )}
@@ -824,7 +857,7 @@ function App(){
   <div style={{background:hCol,color:'white',padding:'10px 12px',boxShadow:'0 4px 16px rgba(0,0,0,.35)',position:'sticky',top:0,zIndex:20}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
       <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
-        <RenderLogo type={settings.logoType} size={34}/>
+        <RenderLogo type={settings.logoType} size={34} customData={settings.customLogoData}/>
         <div>
           <div style={{fontSize:13,fontWeight:800,letterSpacing:-.3,lineHeight:1.2,display:'flex',alignItems:'center',gap:6}}>
             Calendario de Turnos{saveInd&&<span style={{fontSize:9,color:'#4ADE80',fontWeight:600}}>{saveInd}</span>}
@@ -982,6 +1015,31 @@ function App(){
           </div>}
         </Card>
       ))}
+      {/* UCS42 preset */}
+      <Card th={TH} style={{border:`2px solid #0284C7`,background:dm?'#0C1A2E':'#EFF6FF'}}>
+        <STitle th={TH} icon="📋">Cuadrante UCS42 · 2026</STitle>
+        <div style={{fontSize:11,color:TH.textSub,marginBottom:8,lineHeight:1.5}}>
+          Secuencia oficial UCS42 con <b>42 días</b> de patrón. Incluye festivos obligados (trabajo y descanso) para 2026.
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:10}}>
+          {UCS42_PAT.map((d,i)=>(
+            <div key={i} style={{width:20,height:20,borderRadius:4,background:d==='work'?TC:LC,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <span style={{fontSize:7,fontWeight:800,color:'white'}}>{d==='work'?'T':'L'}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10,fontSize:10}}>
+          <div>
+            <div style={{fontWeight:800,color:'#DC2626',marginBottom:3}}>🔴 F. Trabajo ({UCS42_MW.length})</div>
+            {UCS42_MW.map(d=><div key={d} style={{color:TH.textSub}}>{d.slice(5)}</div>)}
+          </div>
+          <div>
+            <div style={{fontWeight:800,color:'#16A34A',marginBottom:3}}>🟢 F. Descanso ({UCS42_MR.length})</div>
+            {UCS42_MR.map(d=><div key={d} style={{color:TH.textSub}}>{d.slice(5)}</div>)}
+          </div>
+        </div>
+        <Btn full color='#0284C7' onClick={applyUCS42}>✅ Aplicar cuadrante UCS42 a 2026</Btn>
+      </Card>
       <Btn full disabled={!pat.length} onClick={applyPat}>🔄 Aplicar patrón al año {td.getFullYear()}</Btn>
       <div style={{height:1,background:TH.border,margin:'16px 0'}}/>
       <Card th={TH}>
@@ -1224,7 +1282,13 @@ function App(){
                   </div>
                   {form.eh.tipo==='librar'&&(parseFloat(form.eh.d)||0)+(parseFloat(form.eh.n)||0)+(parseFloat(form.eh.fd)||0)>0&&(
                     <div style={{marginTop:8,background:dm?'#0A2A0A':'#DCFCE7',borderRadius:12,padding:'8px 12px',fontSize:11,color:'#15803D',fontWeight:600}}>
-                      ✅ Se añadirán {getLibrarH(form.eh).toFixed(1)}h al total de HLIBS
+                      ✅ Se añadirán <b>{getLibrarH(form.eh).toFixed(2)}h</b> al total de HLIBS
+                      {((parseFloat(form.eh.n)||0)+(parseFloat(form.eh.fd)||0))>0&&(
+                        <div style={{fontSize:10,fontWeight:400,marginTop:3,color:'#166534'}}>
+                          🌙 Nocturnas y 🎉 Festivas ×1.4 (factor corrector)
+                          {(parseFloat(form.eh.d)||0)>0&&` · ☀️ Diurnas ×1`}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1502,15 +1566,49 @@ function App(){
         </Card>
         <Card th={TH}>
           <STitle th={TH} icon="🖼️">Logo / Icono</STitle>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:12}}>
             {LOGO_OPTS.map(o=>(
               <div key={o.id} onClick={()=>setSettings(s=>({...s,logoType:o.id}))}
-                style={{border:settings.logoType===o.id?'3px solid #1D4ED8':`2px solid ${TH.border}`,borderRadius:14,padding:'10px 4px',
-                  textAlign:'center',cursor:'pointer',background:settings.logoType===o.id?(dm?'#1E3A5F':'#EFF6FF'):TH.cardBg2}}>
+                style={{border:settings.logoType===o.id&&settings.logoType!=='custom'?'3px solid #1D4ED8':`2px solid ${TH.border}`,borderRadius:14,padding:'10px 4px',
+                  textAlign:'center',cursor:'pointer',background:settings.logoType===o.id&&settings.logoType!=='custom'?(dm?'#1E3A5F':'#EFF6FF'):TH.cardBg2}}>
                 <div style={{display:'flex',justifyContent:'center',marginBottom:4}}><RenderLogo type={o.id} size={30}/></div>
                 <div style={{fontSize:8,fontWeight:600,color:TH.textSub}}>{o.l.split(' ')[0]}</div>
               </div>
             ))}
+          </div>
+          {/* Custom logo upload */}
+          <div style={{background:dm?'#0C1A2E':'#EFF6FF',borderRadius:12,padding:12,border:settings.logoType==='custom'?'2px solid #1D4ED8':`1px solid ${TH.border}`}}>
+            <div style={{fontSize:11,fontWeight:700,color:TH.sectionTitle,marginBottom:8}}>📁 Imagen personalizada</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+              {settings.customLogoData&&(
+                <img src={settings.customLogoData} alt="custom" style={{width:44,height:44,borderRadius:10,objectFit:'contain',border:`2px solid ${TH.border}`,flexShrink:0}}/>
+              )}
+              <label style={{flex:1,background:'#1D4ED8',borderRadius:16,padding:'9px 12px',fontSize:11,color:'white',cursor:'pointer',fontWeight:700,textAlign:'center',display:'block'}}>
+                📂 Subir desde el móvil
+                <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{
+                  const f=e.target.files?.[0];if(!f)return;
+                  const r=new FileReader();
+                  r.onload=ev=>{
+                    setSettings(s=>({...s,customLogoData:ev.target.result,logoType:'custom'}));
+                  };r.readAsDataURL(f);
+                }}/>
+              </label>
+            </div>
+            <div style={{fontSize:10,color:TH.textSub,marginBottom:6}}>O pega una URL de imagen:</div>
+            <div style={{display:'flex',gap:6}}>
+              <input type="text" placeholder="https://..." id="logoUrlInput"
+                style={{flex:1,borderRadius:16,border:`1.5px solid ${TH.inputBorder}`,padding:'7px 10px',fontSize:11,background:TH.inputBg,color:TH.text,fontFamily:'inherit'}}/>
+              <button onClick={()=>{
+                const url=document.getElementById('logoUrlInput')?.value?.trim();
+                if(!url)return;
+                setSettings(s=>({...s,customLogoData:url,logoType:'custom'}));
+              }} style={{background:'#1D4ED8',border:'none',borderRadius:14,padding:'7px 14px',fontSize:11,color:'white',cursor:'pointer',fontWeight:700}}>OK</button>
+            </div>
+            {settings.customLogoData&&settings.logoType==='custom'&&(
+              <button onClick={()=>setSettings(s=>({...s,customLogoData:null,logoType:'pm'}))}
+                style={{marginTop:8,background:'none',border:`1px solid ${TH.border}`,borderRadius:12,padding:'4px 10px',fontSize:10,color:'#B91C1C',cursor:'pointer',fontWeight:600}}>
+                🗑 Quitar imagen personalizada</button>
+            )}
           </div>
         </Card>
         <Card th={TH}>
